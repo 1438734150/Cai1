@@ -1,0 +1,1807 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>根轨迹 / 奈奎斯特·伯德 分析器</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#151a22; --line:#232b37; --fg:#e6edf3; --dim:#8b98a9;
+    --accent:#4c8dff; --red:#e60012;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:14px/1.5 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  h1 span{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
+  #tabs{display:flex;gap:6px;margin-left:auto}
+  .tab{
+    background:#1b2230; color:var(--dim); border:1px solid var(--line); border-radius:8px;
+    padding:7px 18px; font-size:13px; cursor:pointer; transition:.15s;
+  }
+  .tab:hover{color:var(--fg);border-color:#3a4658}
+  .tab.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 0 0 3px rgba(76,141,255,.18)}
+  .bar{
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:8px 16px;background:#12161d;border-bottom:1px solid var(--line);font-size:13px;
+  }
+  .bar label{display:flex;align-items:center;gap:6px;color:var(--dim);white-space:nowrap}
+  .bar input[type=text]{
+    background:#0b0e13;border:1px solid var(--line);color:var(--fg);border-radius:6px;
+    padding:5px 9px;font:12px/1.4 Consolas,monospace;width:250px;
+  }
+  .bar input[type=text]:focus{outline:none;border-color:var(--accent)}
+  .bar input[type=number]{
+    background:#0b0e13;border:1px solid var(--line);color:var(--fg);border-radius:6px;
+    padding:5px 7px;width:80px;font:12px/1.4 Consolas,monospace;
+  }
+  .bar button{
+    background:#1b2230;color:var(--fg);border:1px solid var(--line);border-radius:6px;
+    padding:6px 13px;cursor:pointer;font-size:12.5px;
+  }
+  .bar button:hover{border-color:var(--accent);color:#fff}
+  .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;background:#1b2230;padding:6px 14px}
+  .seg button.on{background:var(--accent);color:#fff}
+  .hint{margin-left:auto;color:var(--dim);font-size:12px}
+  #err{color:#ff6b6b;font:12px/1.4 Consolas,monospace;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  main{flex:1 1 auto;position:relative;min-height:180px;overflow:hidden}
+  .panel{position:absolute;inset:0;display:none;min-height:0}
+  .panel.active{display:block}
+  /* 用绝对定位而非 flex 百分比高度：
+     flex + height:100% 在部分浏览器/缩放下会让 canvas 高度算成 0，
+     导致画布空白。绝对定位的 inset 更稳。
+     注意必须用 width/height:100% 而不是 auto：
+     canvas 是替换元素，width:auto + left/right 约束会回退到固有尺寸，
+     导致尺寸指数级膨胀。 */
+  .grid2{position:absolute;inset:0;display:grid;grid-template-rows:1fr 1fr;gap:1px;background:var(--line)}
+  .cell{position:relative;background:var(--bg);min-height:0;overflow:hidden}
+  .cell > canvas{
+    position:absolute;left:0;top:26px;
+    width:100%;height:calc(100% - 26px);
+  }
+  .legend{
+    position:absolute;left:0;right:0;top:0;height:26px;
+    display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+    padding:0 12px;font-size:11.5px;color:var(--dim);z-index:2;
+    border-bottom:1px solid rgba(255,255,255,.04);
+  }
+  .legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .legend i{display:inline-block;width:16px;height:2px;border-radius:1px}
+  .legend i.solid{background:#4fc3f7}
+  .legend i.dashed{background:repeating-linear-gradient(90deg,#4fc3f7 0 5px,transparent 5px 9px)}
+  .legend i.mag{background:#35c1ff}
+  .legend i.ph{background:#ffb340}
+  .legend i.arrow{
+    width:0;height:0;background:none;border-radius:0;
+    border-left:8px solid #7fe3ff;border-top:5px solid transparent;border-bottom:5px solid transparent;
+  }
+  canvas{display:block;cursor:crosshair}
+  #cv-rl{width:100%;height:100%}
+  .cell .tag{
+    position:absolute;left:10px;top:8px;font-size:11.5px;color:var(--dim);
+    background:rgba(14,17,22,.72);padding:2px 8px;border-radius:5px;pointer-events:none;
+    border:1px solid rgba(255,255,255,.05);z-index:2;
+  }
+  .vbtns{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px;z-index:3}
+  .vbtns button{
+    width:34px;height:34px;border-radius:8px;background:rgba(27,34,48,.9);color:var(--fg);
+    border:1px solid var(--line);cursor:pointer;font-size:15px;line-height:1;
+  }
+  .vbtns button:hover{border-color:var(--accent);background:var(--accent);color:#fff}
+
+  /* 作者署名 */
+  .author{
+    display:flex;align-items:center;gap:9px;margin-left:14px;flex:0 0 auto;
+    cursor:pointer;position:relative;
+  }
+  .author-avatar{
+    width:38px;height:38px;border-radius:10px;object-fit:cover;flex:0 0 auto;
+    border:1.5px solid rgba(255,179,64,.55);
+    box-shadow:0 2px 10px rgba(0,0,0,.35);
+    transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .author:hover .author-avatar{transform:rotate(-6deg) scale(1.06);border-color:#ffb340}
+  .author-text{display:flex;flex-direction:column;line-height:1.15}
+  .author-badge{
+    font-size:13.5px;font-weight:700;letter-spacing:.6px;white-space:nowrap;
+    color:#ffffff;                                   /* 白色显示 */
+  }
+  .author-tip{font-size:10.5px;color:var(--dim);letter-spacing:2.5px}
+
+  /* 作者信息浮层：点击头像弹出 */
+  .author-pop{
+    position:absolute;top:calc(100% + 10px);right:0;z-index:60;
+    min-width:212px;padding:12px 14px;
+    background:#161b24;border:1px solid #2b3646;border-radius:10px;
+    box-shadow:0 10px 28px rgba(0,0,0,.5);
+    font-size:12.5px;color:var(--fg);
+    opacity:0;visibility:hidden;transform:translateY(-6px);
+    transition:opacity .16s ease, transform .16s ease, visibility .16s;
+  }
+  .author-pop.show{opacity:1;visibility:visible;transform:translateY(0)}
+  /* 小箭头指向头像 */
+  .author-pop::before{
+    content:"";position:absolute;top:-6px;right:18px;width:11px;height:11px;
+    background:#161b24;border-left:1px solid #2b3646;border-top:1px solid #2b3646;
+    transform:rotate(45deg);
+  }
+  .author-pop h4{
+    margin:0 0 9px;font-size:12px;font-weight:600;color:#fff;
+    letter-spacing:.5px;display:flex;align-items:center;gap:7px;
+  }
+  .author-pop h4 img{width:22px;height:22px;border-radius:6px;object-fit:cover}
+  .author-pop .pop-row{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:6px 0;border-top:1px solid rgba(255,255,255,.06);
+  }
+  .author-pop .pop-row:first-of-type{border-top:0}
+  .author-pop .pop-k{color:var(--dim);font-size:11.5px}
+  .author-pop .pop-v{
+    font:12.5px/1 Consolas,"Cascadia Mono",monospace;color:#fff;
+    user-select:all;cursor:text;
+  }
+  .author-pop .pop-copy{
+    margin-left:6px;font-size:10.5px;color:var(--dim);
+    border:1px solid #2b3646;border-radius:5px;padding:1px 6px;
+    background:transparent;cursor:pointer;
+  }
+  .author-pop .pop-copy:hover{color:#fff;border-color:var(--accent)}
+
+  /* 零极点坐标面板：正常文档流元素，展开时把画布往下推 */
+  .zp-panel{
+    display:none;gap:26px;flex-wrap:wrap;align-items:flex-start;
+    padding:9px 16px 11px;background:#10141b;
+    border-bottom:1px solid var(--line);
+    font-size:12px;flex:0 0 auto;
+    max-height:34vh;overflow:auto;
+  }
+  .zp-panel.open{display:flex}
+  .zp-col{min-width:150px;flex:0 1 auto}
+  .zp-head{font-size:11px;color:var(--dim);letter-spacing:.4px;margin-bottom:5px}
+  .zp-head.poles{color:#ffb340}
+  .zp-head.zeros{color:#4fc3f7}
+  .zp-list{font:11.5px/1.75 Consolas,"Cascadia Mono",monospace;color:var(--fg)}
+  .zp-list .zp-row{display:flex;gap:10px;white-space:nowrap}
+  .zp-list .zp-idx{color:var(--dim);min-width:22px}
+  .zp-list .zp-polar{color:#8b98a9}
+  .zp-meta .zp-list{font-family:"Segoe UI","Microsoft YaHei",sans-serif;font-size:11.5px}
+  .zp-meta .zp-list b{color:var(--accent);font-weight:600}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>根轨迹 / 奈奎斯特·伯德 分析器<span>G(s)H(s) = K·N(s)/D(s)</span></h1>
+  <div id="tabs">
+    <button class="tab active" data-target="p-rl">根轨迹</button>
+    <button class="tab" data-target="p-ny">奈奎斯特 / 伯德</button>
+  </div>
+  <div class="author" title="作者：爆浆土豆饼（点击查看信息）">
+    <img class="author-avatar" src="data:image/jpeg;base64,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" alt="爆浆土豆饼">
+    <div class="author-text">
+      <span class="author-badge">爆浆土豆饼</span>
+      <span class="author-tip">作者</span>
+    </div>
+    <!-- 点击头像弹出的作者信息浮层 -->
+    <div class="author-pop" id="authorPop" role="dialog" aria-label="作者信息">
+      <h4><img id="popAvatar" alt="">爆浆土豆饼</h4>
+      <div class="pop-row">
+        <span class="pop-k">QQ</span>
+        <span><span class="pop-v" id="popQQ">1438734150</span><button class="pop-copy" id="popCopy">复制</button></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="bar">
+  <label>N(s) 分子<input id="in-num" type="text" value="1"></label>
+  <label>D(s) 分母<input id="in-den" type="text" value="s(s+2)(s+5)"></label>
+  <div class="seg">
+    <button id="k-pos" class="on">K &gt; 0</button>
+    <button id="k-neg">K &lt; 0</button>
+  </div>
+  <label>ω 范围<input id="in-w" type="number" step="any" value="0.01"> ~ <input id="in-w2" type="number" step="any" value="1000"> rad/s</label>
+  <button id="btn-apply">应用</button>
+  <button id="btn-reset">复位视图</button>
+  <button id="btn-zp">零极点坐标</button>
+  <span id="err"></span>
+  <span class="hint">滚轮缩放 · 拖拽平移 · 双击复位</span>
+</div>
+
+<!-- 零极点坐标明细面板 -->
+<div id="zpPanel" class="zp-panel">
+  <div class="zp-col">
+    <div class="zp-head poles">极点 &nbsp;×<span id="zpPoleCount"></span></div>
+    <div id="zpPoles" class="zp-list"></div>
+  </div>
+  <div class="zp-col">
+    <div class="zp-head zeros">零点 &nbsp;○<span id="zpZeroCount"></span></div>
+    <div id="zpZeros" class="zp-list"></div>
+  </div>
+  <div class="zp-col zp-meta">
+    <div class="zp-head">系统信息</div>
+    <div id="zpInfo" class="zp-list"></div>
+  </div>
+</div>
+
+<main>
+  <div id="p-rl" class="panel active"><canvas id="cv-rl"></canvas></div>
+  <div id="p-ny" class="panel">
+    <div class="grid2">
+      <div class="cell">
+        <div class="legend">
+          <span><i class="sw solid"></i>ω&gt;0</span>
+          <span><i class="sw dashed"></i>ω&lt;0（镜像）</span>
+          <span><i class="sw arrow"></i>箭头指向 ω 增大方向</span>
+        </div>
+        <canvas id="cv-pol"></canvas>
+      </div>
+      <div class="cell">
+        <div class="legend">
+          <span><i class="sw mag"></i>幅频 L(ω) dB</span>
+          <span><i class="sw ph"></i>相频 φ(ω) °</span>
+        </div>
+        <canvas id="cv-bode"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="vbtns">
+    <button data-v="in" title="放大">+</button>
+    <button data-v="out" title="缩小">−</button>
+    <button data-v="fit" title="自动适应">⟲</button>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+/* ===========================================================
+   多项式：系数一律按【降幂】存放，即 [a_n, ..., a_0]
+   =========================================================== */
+function pTrim(p){
+  let i=0;
+  while(i<p.length-1 && Math.abs(p[i])<1e-14) i++;
+  return p.slice(i);
+}
+function pAdd(a,b){                       // 同次项相加
+  const n=Math.max(a.length,b.length), o=new Array(n).fill(0);
+  for(let i=0;i<n;i++) o[n-1-i]=(a[a.length-1-i]||0)+(b[b.length-1-i]||0);
+  return pTrim(o);
+}
+function pScale(a,k){ return pTrim(a.map(v=>v*k)); }
+function pMul(A,B){
+  const o=new Array(A.length+B.length-1).fill(0);
+  for(let m=0;m<A.length;m++) for(let n=0;n<B.length;n++) o[m+n]+=A[m]*B[n];
+  return pTrim(o);
+}
+function pDeriv(c){                       // 求导（降幂）
+  if(c.length<=1) return [0];
+  return pTrim(c.slice(0,-1).map((v,i)=>v*(c.length-1-i)));
+}
+
+/* 解析多项式字符串：支持 s、数字、+ - * /、括号、^、j */
+function parsePoly(str){
+  let src=String(str||"").replace(/\s+/g,"");
+  if(src==="") src="1";
+  src=src.replace(/\*\*/g,"^");
+  src=src.replace(/(\d|\))(?=[a-zA-Z(])/g,"$1*");   // 2s -> 2*s, )s -> )*s
+  src=src.replace(/([a-zA-Z])(?=[a-zA-Z(])/g,"$1*"); // s( -> s*(
+
+  let i=0;
+  const peek=()=>src[i];
+  const eat=(ch)=>{ if(src[i]!==ch) throw new Error("位置 "+i+" 期望 "+ch); i++; };
+
+  function div(A,B){
+    A=pTrim(A.slice()); B=pTrim(B.slice());
+    if(B.length===1) return pTrim(A.map(v=>v/B[0]));
+    if(A.length<B.length) throw new Error("分式结果不是多项式（余式非零）");
+    const q=new Array(A.length-B.length+1).fill(0);
+    for(let k=0;k<q.length;k++){
+      const c=A[0]/B[0]; q[k]=c;
+      for(let n=0;n<B.length;n++) A[n]-=c*B[n];
+      A=A.slice(1);
+      if(A.length===0) break;
+    }
+    if(A.some(v=>Math.abs(v)>1e-9)) throw new Error("分式结果不是多项式（余式非零）");
+    return pTrim(q);
+  }
+
+  function expr(){
+    let v=term();
+    while(peek()==="+"||peek()==="-"){
+      const op=src[i++]; const r=term();
+      v = op==="+" ? pAdd(v,r) : pAdd(v,pScale(r,-1));
+    }
+    return v;
+  }
+  function term(){
+    let v=unary();
+    while(peek()==="*"||peek()==="/"){
+      const op=src[i++]; const r=unary();
+      v = op==="*" ? pMul(v,r) : div(v,r);
+    }
+    return v;
+  }
+  function unary(){
+    if(peek()==="+"){ i++; return unary(); }
+    if(peek()==="-"){ i++; return pScale(unary(),-1); }
+    return power();
+  }
+  function power(){
+    const base=atom();
+    if(peek()==="^"){
+      i++;
+      let e="";
+      if(peek()==="("){ i++; while(i<src.length&&src[i]!==")") e+=src[i++]; eat(")"); }
+      else { while(i<src.length && /[0-9.\-]/.test(src[i])) e+=src[i++]; }
+      const k=parseFloat(e);
+      if(!isFinite(k)||k<0||Math.abs(k-Math.round(k))>1e-9) throw new Error("幂次须为非负整数: "+e);
+      let o=[1];
+      for(let t=0;t<Math.round(k);t++) o=pMul(o,base);
+      return pTrim(o);
+    }
+    return base;
+  }
+  function atom(){
+    if(peek()==="("){ i++; const v=expr(); eat(")"); return v; }
+    if(peek()==="s"){ i++; return [1,0]; }
+    if(peek()==="j"){ i++; return [1e-12,1]; }
+    if(peek()!==undefined && /[0-9.]/.test(peek())){
+      let s="";
+      while(i<src.length && /[0-9.eE]/.test(src[i])) s+=src[i++];
+      const v=parseFloat(s);
+      if(!isFinite(v)) throw new Error("非法数字: "+s);
+      return [v];
+    }
+    throw new Error("位置 "+i+" 无法解析: '"+(src[i]||"EOF")+"'");
+  }
+
+  const res=expr();
+  if(i<src.length) throw new Error("多余字符: "+src.slice(i));
+  return pTrim(res);
+}
+
+/* ===========================================================
+   复系数多项式求根：Aberth–Ehrlich 迭代
+   =========================================================== */
+function csqrt(z){
+  const r=Math.hypot(z.re,z.im);
+  const re=Math.sqrt(Math.max(0,(r+z.re)/2));
+  const im=Math.sqrt(Math.max(0,(r-z.re)/2))*(z.im<0?-1:1);
+  return {re,im};
+}
+/* 用 Aberth–Ehrlich 求首一多项式 a 的全部根（a 按降幂）。
+   初值取 Cauchy 界圆上的等分点：该圆包含所有根，标准做法收敛可靠。 */
+function abFindAll(a){
+  const n=a.length-1;
+  if(n<1) return [];
+  const pv=(z)=>{
+    let re=0,im=0;
+    for(let k=0;k<a.length;k++){
+      const co=a[k];
+      const nr=re*z.re-im*z.im+co, ni=re*z.im+im*z.re;
+      re=nr; im=ni;
+    }
+    return {re,im};
+  };
+  const dv=(z)=>{
+    let re=0,im=0;
+    for(let k=0;k<a.length-1;k++){
+      const co=a[k]*(a.length-1-k);
+      const nr=re*z.re-im*z.im+co, ni=re*z.im+im*z.re;
+      re=nr; im=ni;
+    }
+    return {re,im};
+  };
+  // Cauchy 界：所有根满足 |z| < bound
+  let bound=0;
+  for(let k=1;k<a.length;k++) bound=Math.max(bound, Math.abs(a[k]));
+  bound=Math.max(1, bound+1);
+
+  const z=[];
+  for(let k=0;k<n;k++){
+    const th=2*Math.PI*(k+0.5)/n;          // 半格偏移，避免初值落在实轴上
+    z.push({re:bound*Math.cos(th), im:bound*Math.sin(th)});
+  }
+  for(let it=0;it<500;it++){
+    let maxd=0;
+    for(let i=0;i<n;i++){
+      const zi=z[i];
+      const P=pv(zi), D=dv(zi);
+      const pm=P.re*P.re+P.im*P.im;
+      if(pm<1e-300) continue;
+      let sr=0,si=0;
+      for(let j=0;j<n;j++){
+        if(j===i) continue;
+        const dr=zi.re-z[j].re, di=zi.im-z[j].im;
+        const dd=dr*dr+di*di;
+        if(dd<1e-300){ sr=0; si=0; break; }   // 两点重合，跳过这一步的排斥项
+        sr+=dr/dd; si-=di/dd;
+      }
+      const ur=(D.re*P.re+D.im*P.im)/pm, ui=(D.im*P.re-D.re*P.im)/pm;
+      const qr=ur-sr, qi=ui-si;
+      const qq=qr*qr+qi*qi;
+      if(qq<1e-300) continue;
+      const dr2=qr/qq, di2=-qi/qq;
+      zi.re-=dr2; zi.im-=di2;
+      maxd=Math.max(maxd,Math.hypot(dr2,di2));
+    }
+    if(maxd<1e-14*bound) break;
+  }
+  return z;
+}
+
+/* 实系数多项式（降幂，a[0] 已首一化）求全部根。
+   策略：Aberth–Ehrlich 一次得到全部根的初值并精修；
+   再做“去重 + 按需补充”，避免根坍缩导致丢根。 */
+function rootsRealCoef(cf){
+  if(cf.length<=1) return [];
+  const a=cf.map(v=>v/cf[0]);
+  const deg=a.length-1;
+  if(deg===1) return [{re:-a[1], im:0}];
+  if(deg===2){
+    const b=a[1], c=a[2];
+    const disc=b*b-4*c;
+    if(disc>=0){
+      const s=Math.sqrt(disc);
+      return [{re:(-b+s)/2,im:0},{re:(-b-s)/2,im:0}];
+    }
+    const s=Math.sqrt(-disc);
+    return [{re:-b/2, im:s/2},{re:-b/2, im:-s/2}];
+  }
+
+  const pv=(z)=>{
+    let re=0,im=0;
+    for(const co of a){ const nr=re*z.re-im*z.im+co, ni=re*z.im+im*z.re; re=nr; im=ni; }
+    return {re,im};
+  };
+  const newton=(z0)=>{
+    let z={re:z0.re, im:z0.im};
+    for(let it=0;it<200;it++){
+      const P=pv(z);
+      let dre=0,dim=0;
+      for(let k=0;k<a.length-1;k++){
+        const co=a[k]*(a.length-1-k);
+        const nr=dre*z.re-dim*z.im+co, ni=dre*z.im+dim*z.re;
+        dre=nr; dim=ni;
+      }
+      const dq=dre*dre+dim*dim;
+      if(dq<1e-300) break;
+      const qr=(P.re*dre+P.im*dim)/dq, qi=(P.im*dre-P.re*dim)/dq;
+      z.re-=qr; z.im-=qi;
+      if(Math.hypot(qr,qi)<1e-16) break;
+    }
+    if(Math.abs(z.im)<1e-9) z.im=0;
+    return z;
+  };
+
+  // 1) 用 Aberth 得到一批初值
+  let seeds=abFindAll(a);
+
+  // 2) 逐个牛顿精修，并去重
+  const roots=[];
+  const pushUnique=(z)=>{
+    if(!isFinite(z.re)||!isFinite(z.im)) return;
+    if(roots.some(o=>Math.hypot(o.re-z.re,o.im-z.im)<1e-7*Math.max(1,Math.abs(z.re)))) return;
+    roots.push(z);
+  };
+  seeds.forEach(s=>pushUnique(newton(s)));
+
+  // 3) 补根：在未覆盖区域撒扰动初值，直到凑够 deg 个互不相同的根
+  if(roots.length<deg){
+    let bound=1;
+    for(let k=1;k<a.length;k++) bound=Math.max(bound, Math.abs(a[k])+1);
+    const extra=[];
+    for(let ring=0;ring<8 && roots.length+extra.length<deg;ring++){
+      const R=bound*(0.15+0.2*ring);
+      const M=Math.max(8, deg*4);
+      for(let k=0;k<M;k++){
+        const th=2*Math.PI*k/M + ring*0.37;
+        extra.push({re:R*Math.cos(th), im:R*Math.sin(th)});
+      }
+    }
+    for(const e of extra){
+      if(roots.length>=deg) break;
+      const z=newton(e);
+      if(Math.hypot(pv(z).re,pv(z).im)>1e-7*Math.max(1,Math.abs(a[0]))) continue;
+      pushUnique(z);
+    }
+  }
+
+  // 4) 若仍不足（重根情形），把 Aberth 结果直接补上
+  if(roots.length<deg){
+    for(const s of seeds){
+      if(roots.length>=deg) break;
+      const z=Math.abs(s.im)<1e-9?{re:s.re,im:0}:s;
+      if(!isFinite(z.re)||!isFinite(z.im)) continue;
+      roots.push(z);
+    }
+  }
+  return roots.slice(0,deg);
+}
+
+// 降幂实系数多项式求根（供根轨迹使用）
+function rootsOfPolyReal(cIn){
+  const c=pTrim(cIn.slice());
+  if(c.length<=1) return [];
+  if(Math.abs(c[0])<1e-300) return [];
+  return rootsRealCoef(c)
+    .filter(v=>isFinite(v.re)&&isFinite(v.im))
+    .map(v=>({re:Math.abs(v.re)<1e-12?0:v.re, im:Math.abs(v.im)<1e-12?0:v.im}));
+}
+
+/* ===========================================================
+   根轨迹：K 扫掠 + 最近邻分支续接
+   =========================================================== */
+function rootsOfCharPoly(Nc,Dc,K){
+  const c=pTrim(pAdd(Dc.slice(), Nc.map(v=>v*K)));   // D(s)+K·N(s)
+  if(c.length<=1) return [];
+  return rootsOfPolyReal(c);
+}
+
+/* 求某一 K 下所有闭环极点，并保证顺序与 prev 连续。
+   用最小总代价的指派（贪心 + 2-opt 改进），而不是纯最近邻：
+   纯最近邻在多根聚拢时会配对错位，让某条支跳到另一条支上。
+   返回 null 表示根数不足（数值失败）。 */
+function matchRoots(prev, cur){
+  const n = prev.length;
+  if (n !== cur.length) return cur;
+  const cost = (a, b) =>
+    (prev[a].re - cur[b].re) ** 2 + (prev[a].im - cur[b].im) ** 2;
+  const pairs = [];
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+    if (!prev[a] || !cur[b]) continue;
+    pairs.push([cost(a, b), a, b]);
+  }
+  pairs.sort((x, y) => x[0] - y[0]);
+  const mapA = new Array(n).fill(null), usedB = new Array(n).fill(false);
+  for (const [, a, b] of pairs) {
+    if (mapA[a] !== null || usedB[b]) continue;
+    mapA[a] = b; usedB[b] = true;
+  }
+  // 2-opt：交换配对若降低总代价则交换，避免局部最优造成的错位
+  const total = () => { let s = 0; for (let a = 0; a < n; a++) if (mapA[a] !== null) s += cost(a, mapA[a]); return s; };
+  let improved = true, guard = 0;
+  while (improved && guard++ < 8) {
+    improved = false;
+    for (let a1 = 0; a1 < n; a1++) for (let a2 = a1 + 1; a2 < n; a2++) {
+      const b1 = mapA[a1], b2 = mapA[a2];
+      if (b1 === null || b2 === null) continue;
+      if (cost(a1, b2) + cost(a2, b1) < cost(a1, b1) + cost(a2, b2) - 1e-12) {
+        mapA[a1] = b2; mapA[a2] = b1; improved = true;
+      }
+    }
+  }
+  const ordered = [];
+  for (let a = 0; a < n; a++) ordered.push(mapA[a] !== null ? cur[mapA[a]] : null);
+  return ordered;
+}
+
+function polesAt(Nc,Dc,K,prev,n){
+  let r=rootsOfCharPoly(Nc,Dc,K);
+  if(r.length<n) return null;
+  if(prev && prev.length===r.length){
+    r=matchRoots(prev, r);
+  }
+  return r;
+}
+/* 解析求分离点/会合点（含复平面上的）。
+   满足 dK/ds = 0，其中 K(s) = -D(s)/N(s)，故等价于
+       N(s)·D'(s) − N'·D(s) = 0
+   解出该方程的根后，只保留 K 的符号与 kSign 一致的解：
+     kSign>0 取 Kr>0 的点（K 由 0 增大时的分离点）
+     kSign<0 取 Kr<0 的点（K 由 0 减小时的分离点）
+   返回 [{s:{re,im}, K}]，K 为在该分支上使用的“绝对”增益 |Kr|。 */
+function breakawayPoints(Nc,Dc,kSign){
+  const sgn = kSign<0 ? -1 : 1;
+  const Np=pDeriv(Nc), Dp=pDeriv(Dc);
+  let eq=pAdd(pMul(Nc,Dp), pScale(pMul(Np,Dc),-1));   // N·D' − N'·D
+  eq=pTrim(eq);
+  if(eq.length<=1) return [];
+  const roots=rootsOfPolyReal(eq);
+  const out=[];
+  for(const r of roots){
+    // K = -D(s)/N(s)
+    const Nd=evalComplex(Nc,r), Dd=evalComplex(Dc,r);
+    const den=Nd.re*Nd.re+Nd.im*Nd.im;
+    if(den<1e-300) continue;                            // N(s)=0，不是分离点
+    const Kr=-(Dd.re*Nd.re+Dd.im*Nd.im)/den;
+    // 虚部校验：分离点必须对应实增益
+    const Ki=((Dd.im*Nd.re-Dd.re*Nd.im))/den;
+    if(Math.abs(Ki)>1e-6*Math.max(1,Math.abs(Kr))) continue;
+    // 符号校验：只保留与当前分支（kSign）一致的点
+    if(sgn>0 && Kr<=1e-12) continue;
+    if(sgn<0 && Kr>=-1e-12) continue;
+    // 校验该点确为特征方程的根（用带符号的 K）
+    const check=evalComplex(pAdd(Dc.slice(), Nc.map(v=>v*Kr)), r);
+    if(Math.hypot(check.re,check.im)>1e-6) continue;
+    out.push({s:{re:r.re, im:r.im}, K:Math.abs(Kr)});   // K 统一存绝对值
+  }
+  return out;
+}
+function krOutOfRange(K){ return !isFinite(K) || K<0; }
+// 复系数多项式在复点求值（Horner）
+function evalComplex(c,z){
+  let re=0,im=0;
+  for(const co of c){
+    const nr=re*z.re-im*z.im+co, ni=re*z.im+im*z.re;
+    re=nr; im=ni;
+  }
+  return {re,im};
+}
+
+/* 自适应 K 扫掠：
+   kSign 决定 K 取正还是负；轨迹形状对 K 的符号敏感，故由调用方传入。 */
+function computeRootLocus(Nc,Dc,kSign,Kmax,NK){
+  kSign = kSign<0 ? -1 : 1;
+  const n=Math.max(Dc.length-1, Nc.length-1);
+  // 粗扫 K 取值：几何级数（低 K 更密）+ 解析分离点处的 K（精确落在折返点上）
+  const ratioSet=new Set();
+  for(let i=0;i<=NK;i++){
+    const t=i/NK;
+    ratioSet.add(t===0 ? 0 : Math.pow(t,3));
+  }
+  ratioSet.add(1);
+  // 把分离点/会合点的 K 精确插入，避免折返处被整段跳过
+  const bps=breakawayPoints(Nc,Dc,kSign);
+  bps.forEach(bp=>{
+    const t=Math.pow(Math.min(1, bp.K/Kmax), 1/3);   // 反解 t（与上面的 t^3 对应）
+    ratioSet.add(t);
+    // 折返点两侧再各加一档，让尖角形状圆顺
+    ratioSet.add(Math.max(0, t-Math.abs(t)*0.02-1e-9));
+    ratioSet.add(Math.min(1, t+Math.abs(t)*0.02+1e-9));
+  });
+  const ratios=[...ratioSet].sort((a,b)=>a-b);
+
+  const evalK=(K,prev)=>{
+    return polesAt(Nc,Dc,kSign*K,prev,n);
+  };
+
+  // 粗扫
+  const pts=[];
+  let prev=null;
+  for(const t of ratios){
+    const K=t*Kmax;
+    const r=evalK(K,prev);
+    if(!r) continue;
+    pts.push({K, r});
+    prev=r;
+  }
+  if(!pts.length) return Array.from({length:n},()=>[]);
+
+  // 自适应细分：相邻采样点位移过大就插入中点（递归深度受限）。
+  // 阈值取“每段自身尺度”的极小值：轨迹远处步子大、近处步子小，
+  // 若用全局跨度做阈值，分离点/会合点这种局部特征会被整段跳过。
+  const out=[pts[0]];
+  const REL=0.006;                              // 相对本段位移的比例阈值（越小越密）
+  const ABS_MIN=1e-5;                           // 绝对下限，避免无限细分
+
+  const subdivide=(p0,p1,depth)=>{
+    if(depth<=0) return;
+    let maxMove=0;
+    for(let b=0;b<n;b++){
+      if(!p0.r[b]||!p1.r[b]) continue;
+      maxMove=Math.max(maxMove, Math.hypot(p1.r[b].re-p0.r[b].re, p1.r[b].im-p0.r[b].im));
+    }
+    // 本段两端点到原点的尺度，作为局部参考尺寸
+    let scale=0;
+    for(let b=0;b<n;b++){
+      if(p0.r[b]) scale=Math.max(scale, Math.hypot(p0.r[b].re,p0.r[b].im));
+      if(p1.r[b]) scale=Math.max(scale, Math.hypot(p1.r[b].re,p1.r[b].im));
+    }
+    scale=Math.max(scale, 1);
+    // 判据：本段位移相对局部尺度足够小则接受；同时给出绝对下限
+    if(maxMove < Math.max(scale*REL, ABS_MIN)) return;
+    // K 变化的中间值若与端点重合则无法再分
+    const Kmid=(p0.K+p1.K)/2;
+    if(Kmid<=p0.K || Kmid>=p1.K) return;
+    const rmid=evalK(Kmid,p0.r);
+    if(!rmid) return;
+    const mid={K:Kmid, r:rmid};
+    subdivide(p0,mid,depth-1);
+    out.push(mid);
+    subdivide(mid,p1,depth-1);
+  };
+  // 逐段展开：每段先细分前半，再压入该段终点
+  for(let i=1;i<pts.length;i++){
+    subdivide(pts[i-1], pts[i], 20);
+    out.push(pts[i]);
+  }
+
+  // 注：分离点/会合点的 K 已作为采样点加入（见上），此处不再额外插入
+  // 乱序的根集合——那样会打断分支链的顺序，导致某条支跳到另一条支上。
+
+  // 按 K 排序并展开成分支
+  out.sort((a,b)=>a.K-b.K);
+  const branches=Array.from({length:n},()=>[]);
+
+  /* 分支续接：分支在"会合/分离"处会发生拓扑变化（两条实支合并成共轭复支），
+     此时单纯用"到上一点距离"或"速度外推"都可能错配，画出横贯画面的假线。
+     这里对每个候选配对评估两件事，再取全局最小总代价：
+       1) 与上一点的距离（基础约束，任何情况下都要求连续）
+       2) 与预测点的距离（平滑性，仅作为次要加权，且在折返处自动减弱）
+     关键是第 2 项权重很小（0.25）：折返点附近速度方向会突变，
+     过度信赖外推反而会造成错配。 */
+  let chainPrev=null;      // 上一组已排序的根
+  let chainPrevPrev=null;  // 上上组，用于估计速度
+  for(const p of out){
+    let r=p.r;
+    if(chainPrev){
+      const pred=[];
+      for(let a=0;a<n;a++){
+        const c0=chainPrev[a], c1=chainPrevPrev?chainPrevPrev[a]:null;
+        if(!c0){ pred.push(null); continue; }
+        pred.push(c1 ? {re:c0.re+(c0.re-c1.re), im:c0.im+(c0.im-c1.im)} : null);
+      }
+      const cost=(a,b)=>{
+        const dRaw=(chainPrev[a].re-r[b].re)**2+(chainPrev[a].im-r[b].im)**2;
+        if(!pred[a]) return dRaw;
+        const dPred=(pred[a].re-r[b].re)**2+(pred[a].im-r[b].im)**2;
+        return dRaw + 0.25*dPred;
+      };
+      const pairs=[];
+      for(let a=0;a<n;a++)for(let b=0;b<n;b++){
+        if(!chainPrev[a]||!r[b]) continue;
+        pairs.push([cost(a,b), a, b]);
+      }
+      pairs.sort((x,y)=>x[0]-y[0]);
+      let mapA=new Array(n).fill(null), usedB=new Array(n).fill(false);
+      for(const [,a,b] of pairs){
+        if(mapA[a]!==null||usedB[b]) continue;
+        mapA[a]=b; usedB[b]=true;
+      }
+      // 2-opt：交换配对若降低总代价则交换
+      let improved=true, guard=0;
+      while(improved && guard++<10){
+        improved=false;
+        for(let a1=0;a1<n;a1++)for(let a2=a1+1;a2<n;a2++){
+          const b1=mapA[a1], b2=mapA[a2];
+          if(b1===null||b2===null) continue;
+          if(cost(a1,b2)+cost(a2,b1) < cost(a1,b1)+cost(a2,b2)-1e-12){
+            mapA[a1]=b2; mapA[a2]=b1; improved=true;
+          }
+        }
+      }
+      const ordered=[];
+      for(let a=0;a<n;a++) ordered.push(mapA[a]!==null?r[mapA[a]]:null);
+      r=ordered;
+    }
+    for(let b=0;b<n;b++) if(r[b]) branches[b].push({K:p.K, re:r[b].re, im:r[b].im});
+    chainPrevPrev=chainPrev;
+    chainPrev=r;
+  }
+  return branches;
+}
+
+/* ===========================================================
+   频域响应
+   =========================================================== */
+function polyVal(c,w){                    // s=jw 处取值
+  let re=0,im=0;
+  for(let i=0;i<c.length;i++){
+    const ord=c.length-1-i, co=c[i];
+    const p=Math.pow(w,ord);
+    if(ord%4===0) re+=co*p;
+    else if(ord%4===1) im+=co*p;
+    else if(ord%4===2) re-=co*p;
+    else im-=co*p;
+  }
+  return {re,im};
+}
+function freqResponse(Nc,Dc,w){
+  const N=polyVal(Nc,w), D=polyVal(Dc,w);
+  const dd=D.re*D.re+D.im*D.im;
+  if(dd<1e-300) return {re:Infinity,im:Infinity,mag:Infinity,ph:NaN};
+  return {
+    re:(N.re*D.re+N.im*D.im)/dd,
+    im:(N.im*D.re-N.re*D.im)/dd,
+    mag:Math.hypot(N.re,N.im)/Math.sqrt(dd),
+    ph:Math.atan2(N.im,N.re)-Math.atan2(D.im,D.re)
+  };
+}
+function buildFreqPoints(Nc,Dc,w1,w2,nPts){
+  const pts=[];
+  const l1=Math.log10(Math.max(w1,1e-8));
+  const l2=Math.log10(Math.max(w2,Math.max(w1,1e-8)*1.0001));
+  for(let i=0;i<=nPts;i++){
+    const w=Math.pow(10, l1+(l2-l1)*i/nPts);
+    const H=freqResponse(Nc,Dc,w);
+    if(!isFinite(H.mag)) continue;
+    let ph=H.ph;
+    if(pts.length){                       // 相位连续化（解缠绕）
+      const last=pts[pts.length-1].ph;
+      while(ph-last>Math.PI) ph-=2*Math.PI;
+      while(ph-last<-Math.PI) ph+=2*Math.PI;
+    }
+    pts.push({w, re:H.re, im:H.im, mag:H.mag, ph});
+  }
+  return pts;
+}
+
+/* ===========================================================
+   绘图工具
+   =========================================================== */
+const FONTSM='11px "Segoe UI","Microsoft YaHei",sans-serif';
+const ARROW_COLOR='#e60012';
+
+function setupCanvas(cv){
+  const dpr=Math.min(3, Math.max(1, window.devicePixelRatio||1));
+  // 上限保护：canvas 位图有尺寸上限，异常布局一旦算出超大尺寸会直接失败。
+  // 这里把逻辑尺寸夹在合理区间，避免整页白屏。
+  const MAXW=8192, MAXH=8192;
+  const w=Math.min(MAXW, Math.max(1, Math.round(cv.clientWidth||0)));
+  const h=Math.min(MAXH, Math.max(1, Math.round(cv.clientHeight||0)));
+  const bw=Math.min(MAXW, Math.max(1, Math.round(w*dpr)));
+  const bh=Math.min(MAXH, Math.max(1, Math.round(h*dpr)));
+  if(cv.width!==bw||cv.height!==bh){ cv.width=bw; cv.height=bh; }
+  const ctx=cv.getContext("2d");
+  if(!ctx) return {ctx:null, W:w, H:h, w, h};
+  ctx.setTransform(bw/w, 0, 0, bh/h, 0, 0);
+  ctx.fillStyle="#0e1116";
+  ctx.fillRect(0,0,w,h);
+  // 返回 W/H（调用方按大写解构）；同时保留 w/h 以兼容
+  return {ctx, W:w, H:h, w, h};
+}
+function clearCanvas(cv){
+  const ctx=cv.getContext("2d");
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+}
+function niceStep(range,target){
+  const raw=range/target, e=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/e;
+  return (f<1.5?1:f<3?2:f<7?5:10)*e;
+}
+function fmt(v,step){
+  const d=Math.max(0,Math.ceil(-Math.log10(step)));
+  let s=v.toFixed(Math.min(6,d));
+  if(s==="-0") s="0";
+  return s;
+}
+function sig3(v){
+  if(!isFinite(v)) return String(v);
+  if(v===0) return "0";
+  const a=Math.abs(v);
+  if(a>=1e4||a<1e-3) return v.toExponential(1);
+  return String(parseFloat(v.toPrecision(3)));
+}
+/* 复数坐标标签，如 "-2"、"-1+2j"、"0"、"-0.5-1.5j" */
+function fmtComplex(r){
+  const re=parseFloat(r.re.toPrecision(4));
+  const im=parseFloat(r.im.toPrecision(4));
+  const rs=(Object.is(re,-0)?"0":String(re));
+  if(Math.abs(im)<1e-9) return rs;                 // 实根
+  const imAbs=Math.abs(im);
+  // 始终写出数字（-1−2j、0+1j），避免 "0+j" 这种含混写法
+  const imStr=String(Object.is(imAbs,-0)?0:imAbs);
+  // 实部为 0 时省略前导 "0+"，直接写 "5j" / "−5j"，更接近手写习惯
+  if(Math.abs(re)<1e-9) return (im>0?"":'−')+imStr+"j";
+  return rs + (im>0?"+":"−") + imStr + "j";
+}
+/* 极坐标形式，用于零极点列表，如 "2.236∠116.6°" */
+function fmtPolar(r){
+  const mag=Math.hypot(r.re,r.im);
+  const ang=Math.atan2(r.im,r.re)*180/Math.PI;
+  return parseFloat(mag.toPrecision(4))+"∠"+parseFloat(ang.toPrecision(4))+"°";
+}
+
+/* 沿折线按弧长等分画方向箭头
+   pts:[{x,y}] 已是像素坐标；flag<0 时箭头方向取反 */
+function drawFlowArrows(ctx,pts,flag,color,count){
+  if(!pts||pts.length<3) return;
+  const cum=[0];
+  for(let i=1;i<pts.length;i++){
+    cum.push(cum[i-1]+Math.hypot(pts[i].x-pts[i-1].x, pts[i].y-pts[i-1].y));
+  }
+  const total=cum[cum.length-1];
+  if(!(total>8)) return;
+  const n=Math.max(1, count || Math.min(6,Math.max(1,Math.floor(total/110))));
+  const size=9;
+  for(let k=0;k<n;k++){
+    const target=total*((k+0.5)/n);
+    let i=1;
+    while(i<cum.length-1 && cum[i]<target) i++;
+    const seg=cum[i]-cum[i-1];
+    const u=seg>1e-9?(target-cum[i-1])/seg:0;
+    const px=pts[i-1].x+(pts[i].x-pts[i-1].x)*u;
+    const py=pts[i-1].y+(pts[i].y-pts[i-1].y)*u;
+    const a=Math.max(0,i-2), b=Math.min(pts.length-1,i+1);
+    let dx=pts[b].x-pts[a].x, dy=pts[b].y-pts[a].y;
+    const L=Math.hypot(dx,dy);
+    if(L<1e-6) continue;
+    dx/=L; dy/=L;
+    const s=flag<0?-1:1;
+    const ax=dx*s, ay=dy*s;
+    ctx.save();
+    ctx.fillStyle=color;
+    ctx.beginPath();
+    ctx.moveTo(px+ax*size*0.55, py+ay*size*0.55);
+    ctx.lineTo(px-ax*size*0.45-ay*size*0.36, py-ay*size*0.45+ax*size*0.36);
+    ctx.lineTo(px-ax*size*0.45+ay*size*0.36, py-ay*size*0.45-ax*size*0.36);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* 复平面网格 + 坐标系 */
+function drawComplexGrid(ctx,m,iw,ih,view,map){
+  const step=niceStep(2*view.half,7);
+  const x0=view.cx-view.half, x1=view.cx+view.half;
+  const y0=view.cy-view.half, y1=view.cy+view.half;
+  ctx.save();
+  ctx.strokeStyle="#1b222c"; ctx.lineWidth=1; ctx.font=FONTSM; ctx.fillStyle="#7f8b9b";
+  for(let gx=Math.ceil(x0/step)*step; gx<=x1+1e-12; gx+=step){
+    const p=map(gx,y0);
+    ctx.beginPath(); ctx.moveTo(p.x,m.t); ctx.lineTo(p.x,m.t+ih); ctx.stroke();
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    ctx.fillText(fmt(gx,step), p.x, m.t+ih+5);
+  }
+  for(let gy=Math.ceil(y0/step)*step; gy<=y1+1e-12; gy+=step){
+    const p=map(x0,gy);
+    ctx.beginPath(); ctx.moveTo(m.l,p.y); ctx.lineTo(m.l+iw,p.y); ctx.stroke();
+    ctx.textAlign="right"; ctx.textBaseline="middle";
+    ctx.fillText(fmt(gy,step), m.l-7, p.y);
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle="#6d7a8c"; ctx.lineWidth=1.4;
+  const o=map(0,0);
+  ctx.beginPath(); ctx.moveTo(m.l,o.y); ctx.lineTo(m.l+iw,o.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(o.x,m.t); ctx.lineTo(o.x,m.t+ih); ctx.stroke();
+  ctx.restore();
+}
+
+/* ===========================================================
+   状态
+   =========================================================== */
+const state={
+  Nc:null, Dc:null,
+  kSign:1,          // K 的符号
+  wSign:1,          // ω 的符号（决定幅相频箭头方向）
+  w1:0.01, w2:1000,
+  tab:"p-rl",
+  rl:{view:null, data:null},
+  ny:{view:null, data:null}
+};
+
+const M_RL={l:56,r:24,t:34,b:38};   // t 留出图例条高度，避免坐标标注与图例重叠
+const M_POL={l:44,r:20,t:38,b:32};   // t 加大，顶部留出图例条，避免与曲线标注重叠
+
+/* 自动视野：目标是“恰好包含所有零极点，并凸显局部特征（分离点等）”。
+   若按轨迹全局最大范围取景，K 很大时轨迹会伸到很远，把原点的
+   零极点挤成一团。因此以零极点为主体，轨迹只按分位数纳入，
+   远端仅作延伸示意。 */
+function fitRootLocus(branches,Nc,Dc){
+  const zeros=rootsOfPolyReal(Nc), poles=rootsOfPolyReal(Dc);
+  let xmin=0,xmax=0,ymin=0,ymax=0;        // 原点务必可见（虚轴/实轴）
+  const push=(x,y)=>{
+    if(!isFinite(x)||!isFinite(y)) return;
+    if(Math.abs(x)>1e12||Math.abs(y)>1e12) return;
+    xmin=Math.min(xmin,x); xmax=Math.max(xmax,x);
+    ymin=Math.min(ymin,y); ymax=Math.max(ymax,y);
+  };
+  // 1) 零极点：必须完整可见（主体）
+  zeros.forEach(r=>push(r.re,r.im));
+  poles.forEach(r=>push(r.re,r.im));
+
+  // 2) 轨迹：先看零极点已经确定的尺度，再决定纳入多少轨迹
+  const zpSpan=Math.max(xmax-xmin, ymax-ymin, 1e-6);
+  // 收集所有轨迹点的到原点距离，取分位数以内者纳入
+  const dists=[];
+  branches.forEach(br=>br.forEach(p=>{
+    const d=Math.hypot(p.re,p.im);
+    if(isFinite(d)) dists.push(d);
+  }));
+  let allowed=zpSpan*2.2;                  // 至少给零极点尺度 2.2 倍，体现趋势
+  if(dists.length){
+    dists.sort((a,b)=>a-b);
+    // 取 92% 分位：排除最远端的长尾，避免视野被撑爆
+    const q=dists[Math.min(dists.length-1, Math.floor(dists.length*0.92))];
+    if(isFinite(q)&&q>0) allowed=Math.max(zpSpan*2.2, Math.min(q, zpSpan*6));
+  }
+  branches.forEach(br=>br.forEach(p=>{
+    if(Math.hypot(p.re,p.im)<=allowed) push(p.re,p.im);
+  }));
+
+  const span=Math.max(xmax-xmin, ymax-ymin, 1e-6);
+  const pad=span*0.14;
+  const cx=(xmin+xmax)/2, cy=(ymin+ymax)/2;
+  const half=Math.max((xmax-xmin)/2+pad, (ymax-ymin)/2+pad);
+  return {cx,cy,half,zeros,poles};
+}
+
+function rlMap(cv,view){
+  const W=cv.clientWidth,H=cv.clientHeight;
+  const iw=W-M_RL.l-M_RL.r, ih=H-M_RL.t-M_RL.b;
+  const k=Math.min(iw,ih)/(2*view.half);   // 等比映射，保直角形状
+  const map=(x,y)=>({x:M_RL.l+iw/2+(x-view.cx)*k, y:M_RL.t+ih/2-(y-view.cy)*k});
+  return {iw,ih,k,map,W,H};
+}
+
+/* 零极点：画出符号并在旁边标注坐标。
+   难点是多个零极点常常共线且靠得很近（如 s(s+2)(s+5) 的三个极点都在实轴上），
+   标签必须错开行才不至于互相压住。
+   策略：为每个标签枚举多个候选位置，按"不与已放置标签重叠 + 不遮挡其它零极点"
+   依次试探。 */
+function drawZeroPoleLabels(ctx, list, type, map, placedLabels, iw, ih){
+  const others = [];   // 所有零极点位置，用于避免标签压住它们
+  ctx.save();
+  // 坐标标注用等宽、稍大、半粗的字体：数字对齐好看，缩放下也清晰
+  ctx.font="600 12px Consolas,\"Cascadia Mono\",\"Microsoft YaHei\",monospace";
+  list.forEach(r=>{
+    if(Math.abs(r.re)>1e7) return;
+    others.push(map(r.re,r.im));
+  });
+
+  /* 按屏幕 x 从左到右处理，让相邻的零极点依次"认领"不同的行，
+     这样共线的多个零极点也能各占一行、互不遮挡。 */
+  const items = list
+    .filter(r=>Math.abs(r.re)<=1e7)
+    .map(r=>({ r, q: map(r.re,r.im) }))
+    .sort((A,B)=>A.q.x-B.q.x);
+
+  items.forEach(({r,q})=>{
+    const txt=fmtComplex(r);
+    const color=type==="pole"?"#ffd98a":"#a5e2ff";
+    const w=ctx.measureText(txt).width+10, h=16;
+
+    const mkBox=(tx,ty,al,bl)=>{
+      const x0 = al==="left"? tx : al==="right"? tx-w : tx-w/2;
+      const y0 = bl==="bottom"? ty-h : ty;
+      return {x0,y0,x1:x0+w,y1:y0+h};
+    };
+    const overlap=(a,b)=>!(a.x1<b.x0+3||a.x0>b.x1-3||a.y1<b.y0+2||a.y0>b.y1-2);
+
+    /* 候选位置按"行"组织：优先正上方不同高度（错行），
+       再考虑斜上方/斜下方，最后正下方。
+       行距从近到远递增，保证前面几个候选尽量靠近标记点。 */
+    const cands=[];
+    const rows=[16, 32, 48, 64, 80];
+    for(const dy of rows) cands.push([q.x, q.y-dy, "center", "bottom"]);  // 正上方错行
+    cands.push([q.x+11, q.y-11, "left",  "bottom"]);
+    cands.push([q.x-11, q.y-11, "right", "bottom"]);
+    for(const dy of rows) cands.push([q.x, q.y+dy, "center", "top"]);     // 正下方错行
+    cands.push([q.x+11, q.y+11, "left",  "top"   ]);
+    cands.push([q.x-11, q.y+11, "right", "top"   ]);
+
+    let chosen=null;
+    for(const [tx,ty,al,bl] of cands){
+      const box=mkBox(tx,ty,al,bl);
+      if(box.x0<M_RL.l+1 || box.x1>M_RL.l+iw-1) continue;
+      if(box.y0<M_RL.t+16 || box.y1>M_RL.t+ih-1) continue;
+      if(placedLabels.some(o=>overlap(box,o))) continue;
+      // 不压住其它零极点符号（留 7px 净空）。
+      // 注意排除自己的标记点：标注就在自己符号正上方是正常排版。
+      const covers=others.some(o=>
+        o!==q && o.x>box.x0-7 && o.x<box.x1+7 && o.y>box.y0-7 && o.y<box.y1+7);
+      if(covers) continue;
+      chosen={tx,ty,al,bl,box}; break;
+    }
+    // 兜底：只要不越界即可
+    if(!chosen){
+      for(const [tx,ty,al,bl] of cands){
+        const box=mkBox(tx,ty,al,bl);
+        if(box.x0<M_RL.l+1 || box.x1>M_RL.l+iw-1) continue;
+        if(box.y0<M_RL.t+16 || box.y1>M_RL.t+ih-1) continue;
+        chosen={tx,ty,al,bl,box}; break;
+      }
+    }
+    if(!chosen) return;
+    placedLabels.push(chosen.box);
+
+    // 引导线：标注离符号较远时连一条细线，避免认错对象
+    const ax = chosen.al==="left"? chosen.box.x0 : chosen.al==="right"? chosen.box.x1 : chosen.tx;
+    const ay = chosen.bl==="bottom"? chosen.box.y1 : chosen.box.y0;
+    if(Math.hypot(ax-q.x, ay-q.y) > 15){
+      ctx.save();
+      ctx.strokeStyle=color; ctx.globalAlpha=0.5; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(q.x,q.y); ctx.lineTo(ax,ay); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.textAlign=chosen.al; ctx.textBaseline=chosen.bl;
+    /* 用半透明圆角底衬而不是粗描边：
+       粗描边会啃掉 "-" 这类细笔画，导致负号看不清。 */
+    const bx=chosen.box;
+    ctx.save();
+    ctx.fillStyle="rgba(10,13,18,.82)";
+    const rr=4, x0=bx.x0-3, y0=bx.y0-1, ww=bx.x1-bx.x0+6, hh=bx.y1-bx.y0+2;
+    ctx.beginPath();
+    ctx.moveTo(x0+rr,y0);
+    ctx.lineTo(x0+ww-rr,y0); ctx.quadraticCurveTo(x0+ww,y0,x0+ww,y0+rr);
+    ctx.lineTo(x0+ww,y0+hh-rr); ctx.quadraticCurveTo(x0+ww,y0+hh,x0+ww-rr,y0+hh);
+    ctx.lineTo(x0+rr,y0+hh); ctx.quadraticCurveTo(x0,y0+hh,x0,y0+hh-rr);
+    ctx.lineTo(x0,y0+rr); ctx.quadraticCurveTo(x0,y0,x0+rr,y0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle=color;
+    ctx.fillText(txt, chosen.tx, chosen.ty);
+  });
+  ctx.restore();
+}
+
+function drawRootLocus(){
+  const cv=document.getElementById("cv-rl");
+  const {ctx,W,H}=setupCanvas(cv);
+  if(!ctx) return;
+  const view=state.rl.view;
+  if(!view||!state.rl.data) return;
+  const {iw,ih,map}=rlMap(cv,view);
+
+  drawComplexGrid(ctx,M_RL,iw,ih,view,map);
+
+  // 轨迹（全红）
+  const branchPx=[];
+  ctx.save();
+  ctx.lineWidth=2.2; ctx.strokeStyle=ARROW_COLOR;
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.shadowColor="rgba(230,0,18,.35)"; ctx.shadowBlur=6;
+  state.rl.data.branches.forEach(br=>{
+    const real=br.filter(Boolean);
+    if(real.length<2) return;
+    ctx.beginPath();
+    real.forEach((p,i)=>{ const q=map(p.re,p.im); i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); });
+    ctx.stroke();
+    branchPx.push(real.map(p=>map(p.re,p.im)));
+  });
+  ctx.restore();
+
+  // K 方向箭头：K>0 指向 K 增大；K<0 指向 K 减小
+  ctx.save();
+  branchPx.forEach(pts=>drawFlowArrows(ctx,pts,state.kSign,ARROW_COLOR));
+  ctx.restore();
+
+  // 零极点符号（坐标标注在符号之后统一做，便于避让排版）
+  const drawZPSymbol=(list,type)=>list.forEach(r=>{
+    if(Math.abs(r.re)>1e7) return;
+    const q=map(r.re,r.im);
+    ctx.save(); ctx.lineWidth=2;
+    if(type==="pole"){
+      ctx.strokeStyle="#ffb340";
+      const s=6; ctx.beginPath();
+      ctx.moveTo(q.x-s,q.y-s); ctx.lineTo(q.x+s,q.y+s);
+      ctx.moveTo(q.x+s,q.y-s); ctx.lineTo(q.x-s,q.y+s);
+      ctx.stroke();
+    }else{
+      ctx.strokeStyle="#4fc3f7";
+      ctx.beginPath(); ctx.arc(q.x,q.y,6,0,2*Math.PI); ctx.stroke();
+    }
+    ctx.restore();
+  });
+  drawZPSymbol(state.rl.data.poles,"pole");
+  drawZPSymbol(state.rl.data.zeros,"zero");
+
+  // 坐标标注：极点先标（数量少且更关键），零点后标
+  const placedLabels=[];
+  drawZeroPoleLabels(ctx, state.rl.data.poles, "pole", map, placedLabels, iw, ih);
+  drawZeroPoleLabels(ctx, state.rl.data.zeros, "zero", map, placedLabels, iw, ih);
+
+  // 图例
+  ctx.save();
+  ctx.font=FONTSM;
+  ctx.fillStyle="#ffb340"; ctx.textAlign="left"; ctx.textBaseline="top";
+  ctx.fillText("× 极点", M_RL.l+6, M_RL.t+2);
+  ctx.fillStyle="#4fc3f7"; ctx.fillText("○ 零点", M_RL.l+64, M_RL.t+2);
+  ctx.fillStyle=ARROW_COLOR;
+  ctx.fillText("▶ K "+(state.kSign>0?"增大":"减小")+"方向", M_RL.l+128, M_RL.t+2);
+  ctx.restore();
+
+  // 视口提示
+  ctx.save();
+  ctx.font=FONTSM; ctx.fillStyle="#8b98a9";
+  ctx.textAlign="right"; ctx.textBaseline="bottom";
+  ctx.fillText("视口 ±"+view.half.toPrecision(3)+"　等比坐标　K "+(state.kSign>0?"→ +∞":"→ −∞"), M_RL.l+iw, H-6);
+  ctx.restore();
+}
+
+/* ===========================================================
+   幅相频特性（奈奎斯特极坐标）
+   =========================================================== */
+function drawPolar(){
+  const cv=document.getElementById("cv-pol");
+  const {ctx,W,H}=setupCanvas(cv);
+  if(!ctx) return;
+  const view=state.ny.view;
+  if(!view||!state.ny.data) return;
+  const iw=W-M_POL.l-M_POL.r, ih=H-M_POL.t-M_POL.b;
+  const k=Math.min(iw,ih)/(2*view.half);
+  const map=(x,y)=>({x:M_POL.l+iw/2+(x-view.cx)*k, y:M_POL.t+ih/2-(y-view.cy)*k});
+
+  drawComplexGrid(ctx,M_POL,iw,ih,view,map);
+
+  // 单位圆
+  ctx.save();
+  ctx.strokeStyle="rgba(120,140,170,.28)"; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+  const o=map(0,0);
+  ctx.beginPath(); ctx.arc(o.x,o.y,k,0,2*Math.PI); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  const pts=state.ny.data.freq;
+  if(pts.length>1){
+    // ω>0 支（实线）
+    ctx.save();
+    ctx.lineWidth=2; ctx.strokeStyle="#4fc3f7"; ctx.lineJoin="round";
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q=map(p.re,p.im); i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); });
+    ctx.stroke();
+    // ω<0 支（共轭镜像，虚线）
+    ctx.strokeStyle="rgba(79,195,247,.45)"; ctx.setLineDash([5,4]); ctx.lineWidth=1.6;
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const q=map(p.re,-p.im); i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // ω 方向箭头：ω>0 指向 ω 增大，ω<0 指向 ω 减小
+    const posPx=pts.map(p=>map(p.re,p.im));
+    drawFlowArrows(ctx,posPx,state.wSign,"#7fe3ff",6);
+    const negPx=pts.map(p=>map(p.re,-p.im));
+    drawFlowArrows(ctx,negPx,-state.wSign,"rgba(127,227,255,.7)",5);
+
+    // ω 标注：按 ω 的对数均匀取点（而非数组索引），
+    // 保证标注在频率上均匀分布，不会挤在一起。
+    ctx.save();
+    ctx.font=FONTSM;
+    const lwA=Math.log10(pts[0].w), lwB=Math.log10(pts[pts.length-1].w);
+    const nMark=4;
+    const idxs=[];
+    for(let k=0;k<=nMark;k++){
+      const target=lwA+(lwB-lwA)*k/nMark;
+      let bi=0, bd=Infinity;
+      pts.forEach((p,i)=>{ const d=Math.abs(Math.log10(p.w)-target); if(d<bd){ bd=d; bi=i; } });
+      if(!idxs.includes(bi)) idxs.push(bi);
+    }
+    const topLim=M_POL.t+2;
+    const placed=[];                                     // 已放置的标签位置，用于避让
+    idxs.forEach(mi=>{
+      const p=pts[mi]; if(!p) return;
+      const q=map(p.re,p.im);
+      ctx.fillStyle="#7fe3ff";
+      ctx.beginPath(); ctx.arc(q.x,q.y,2.6,0,2*Math.PI); ctx.fill();
+      ctx.fillStyle="#9fb0c6";
+      let tx=q.x+6, ty=q.y-5, align="left", base="bottom";
+      if(ty<topLim){ ty=q.y+6; base="top"; }
+      if(tx>M_POL.l+iw-46){ tx=q.x-6; align="right"; }
+      // 与已放置标签冲突时逐行下移（或上移），直到找到不冲突的位置
+      for(let guard=0; guard<4; guard++){
+        const hit=placed.some(pl=>Math.abs(pl.x-tx)<52 && Math.abs(pl.y-ty)<12);
+        if(!hit) break;
+        ty += (base==="bottom" ? -13 : 13);
+        if(ty<topLim){ base="top"; ty=q.y+6; }
+        if(ty>M_POL.t+ih-12){ base="bottom"; ty=q.y-5; }
+      }
+      placed.push({x:tx,y:ty});
+      ctx.textAlign=align; ctx.textBaseline=base;
+      ctx.fillText("ω="+sig3(p.w), tx, ty);
+    });
+    ctx.restore();
+  }
+  // 图例已移到 HTML 层（.legend），此处不再绘制，避免与曲线上的 ω 标注重叠
+}
+
+/* ===========================================================
+   伯德图
+   =========================================================== */
+function drawBode(){
+  const cv=document.getElementById("cv-bode");
+  const {ctx,W,H}=setupCanvas(cv);
+  if(!ctx) return;
+  if(!state.ny.data) return;
+  const pts=state.ny.data.freq;
+  const m={l:58,r:58,t:26,b:26};
+  const gap=24;
+  const iw=W-m.l-m.r;
+  const ih=(H-m.t-m.b-gap)/2;
+  const topY=m.t, botY=m.t+ih+gap;
+
+  const lw0=Math.log10(state.w1), lw1=Math.log10(state.w2);
+  const X=(lw)=>m.l+(lw-lw0)/(lw1-lw0)*iw;
+
+  // 幅值范围（dB）
+  let aMin=Infinity,aMax=-Infinity;
+  pts.forEach(p=>{ const db=20*Math.log10(p.mag); if(isFinite(db)){ aMin=Math.min(aMin,db); aMax=Math.max(aMax,db); } });
+  if(!isFinite(aMin)){ aMin=-40; aMax=40; }
+  aMin=Math.min(aMin,0); aMax=Math.max(aMax,0);
+  let sp=(aMax-aMin)*0.12||1;
+  aMin-=sp; aMax+=sp;
+  let st=niceStep(aMax-aMin,5);
+  aMin=Math.floor(aMin/st)*st; aMax=Math.ceil(aMax/st)*st;
+  const Ydb=(db)=>topY+ih-(db-aMin)/(aMax-aMin)*ih;
+
+  // 相位范围
+  let pMin=Infinity,pMax=-Infinity;
+  pts.forEach(p=>{ if(isFinite(p.ph)){ pMin=Math.min(pMin,p.ph); pMax=Math.max(pMax,p.ph); } });
+  if(!isFinite(pMin)){ pMin=-Math.PI; pMax=Math.PI; }
+  let sp2=(pMax-pMin)*0.12||0.2;
+  pMin-=sp2; pMax+=sp2;
+  const st2=niceStep(pMax-pMin,5);
+  pMin=Math.floor(pMin/st2)*st2; pMax=Math.ceil(pMax/st2)*st2;
+  const Yph=(ph)=>botY+ih-(ph-pMin)/(pMax-pMin)*ih;
+
+  const sup=(d)=>{ const mp={"0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹","-":"⁻"};
+    return String(d).split("").map(c=>mp[c]||c).join(""); };
+
+  const frame=(y,h,unit)=>{
+    ctx.save();
+    ctx.strokeStyle="#232b37"; ctx.lineWidth=1; ctx.strokeRect(m.l,y,iw,h);
+    ctx.strokeStyle="#171e28";
+    for(let d=Math.ceil(lw0); d<=Math.floor(lw1); d++){
+      const x=X(d);
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y+h); ctx.stroke();
+    }
+    // 十倍频程刻度（只在下方那格标注，避免中间拥挤）
+    if(unit.bottom){
+      ctx.font=FONTSM; ctx.fillStyle="#7f8b9b";
+      ctx.textAlign="center"; ctx.textBaseline="top";
+      for(let d=Math.ceil(lw0); d<=Math.floor(lw1); d++) ctx.fillText("10"+sup(d), X(d), y+h+5);
+    }
+    // 单位标签放在框内左上角，省掉与图例重复的标题
+    ctx.font=FONTSM; ctx.fillStyle="#9fb0c6";
+    ctx.textAlign="left"; ctx.textBaseline="top";
+    ctx.fillText(unit.text, m.l+6, y+4);
+    ctx.restore();
+  };
+  frame(topY,ih,{text:"幅频 [dB]", bottom:false});
+  frame(botY,ih,{text:"相频 [°]", bottom:true});
+
+  // 幅频曲线
+  if(pts.length>1){
+    const dbPts=pts.filter(p=>isFinite(p.mag))
+                    .map(p=>({x:X(Math.log10(p.w)), y:Ydb(20*Math.log10(p.mag))}));
+    ctx.save();
+    ctx.lineWidth=2; ctx.strokeStyle="#35c1ff"; ctx.lineJoin="round";
+    ctx.beginPath();
+    dbPts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+    ctx.stroke(); ctx.restore();
+    drawFlowArrows(ctx,dbPts,state.wSign,"#7fe3ff",4);
+
+    // 相频曲线
+    const phPts=pts.filter(p=>isFinite(p.ph))
+                    .map(p=>({x:X(Math.log10(p.w)), y:Yph(p.ph)}));
+    ctx.save();
+    ctx.lineWidth=2; ctx.strokeStyle="#ffb340"; ctx.lineJoin="round";
+    ctx.beginPath();
+    phPts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+    ctx.stroke(); ctx.restore();
+    drawFlowArrows(ctx,phPts,state.wSign,"#ffd27f",4);
+  }
+
+  // 刻度
+  ctx.save();
+  ctx.font=FONTSM; ctx.fillStyle="#7f8b9b";
+  ctx.textAlign="right"; ctx.textBaseline="middle";
+  for(let d=aMin; d<=aMax+1e-9; d+=st){
+    const y=Ydb(d);
+    ctx.fillText(Math.abs(d)<1e-9?"0":d.toFixed(st<1?1:0), m.l-6, y);
+  }
+  ctx.textAlign="left";
+  for(let d=pMin; d<=pMax+1e-9; d+=st2){
+    const y=Yph(d);
+    ctx.fillText((d*180/Math.PI).toFixed(0)+"°", W-m.r+6, y);
+  }
+  ctx.restore();
+
+  // 0dB / 0° 参考线
+  ctx.save();
+  ctx.setLineDash([4,4]); ctx.strokeStyle="rgba(120,140,170,.35)";
+  if(0>=aMin&&0<=aMax){ const y=Ydb(0); ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(m.l+iw,y); ctx.stroke(); }
+  if(0>=pMin&&0<=pMax){ const y=Yph(0); ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(m.l+iw,y); ctx.stroke(); }
+  ctx.restore();
+
+  // ω 范围提示：放在右上角图内，避免与底部十倍频程刻度重叠
+  ctx.save();
+  ctx.font=FONTSM; ctx.fillStyle="#8b98a9";
+  ctx.textAlign="right"; ctx.textBaseline="top";
+  ctx.fillText("ω: "+sig3(state.w1)+" ~ "+sig3(state.w2)+" rad/s", m.l+iw, 2);
+  ctx.restore();
+}
+
+/* ===========================================================
+   视口自动适应
+   =========================================================== */
+/* 幅相频（奈奎斯特）自动视野。
+   要点：
+   1) 极坐标图必须等比（否则单位圆会变椭圆），所以只有一个 half。
+   2) 视野要"框住曲线主体"，同时尽量让关键点 (-1,0) 和原点可见——
+      这两处是判稳的依据。
+   3) 曲线常常沿虚轴很长而实部很窄（如 1/[s(s+2)(s+5)] 实部只有 0.35），
+      若按纵横比的较大者取景，横向会留出大片空白。
+      这里改用"关键点优先 + 曲线分位"策略：
+      - 先算曲线主体的分位包围盒
+      - 把 (-1,0) 与原点作为必须纳入的点（除非它们离得极远）
+      - 取包围这些点的最小等比圆
+      这样既能看清曲线，又不会丢掉判稳所需的位置关系。 */
+function autoFitNY(){
+  const pts=state.ny.data.freq.filter(p=>isFinite(p.re)&&isFinite(p.im)
+                                       &&Math.abs(p.re)<1e6&&Math.abs(p.im)<1e6);
+  if(!pts.length) return;
+
+  const q=(arr,f)=>{ const s=arr.slice().sort((a,b)=>a-b);
+    return s[Math.min(s.length-1, Math.max(0, Math.round(f*(s.length-1))))]; };
+  const xs=pts.map(p=>p.re), ys=pts.map(p=>p.im);
+
+  // 曲线主体：去掉 1% 的极端长尾
+  let x0=q(xs,0.01), x1=q(xs,0.99);
+  let y0=q(ys,0.01), y1=q(ys,0.99);
+  if(x1-x0<1e-9){ x0-=1e-6; x1+=1e-6; }
+  if(y1-y0<1e-9){ y0-=1e-6; y1+=1e-6; }
+
+  // 曲线外还有没有值得显示的部分？把 1%~99% 之外的点也算进"实际范围"，
+  // 用于判断视野是否漏掉了明显的曲线段
+  const ax0=Math.min(...xs), ax1=Math.max(...xs);
+  const ay0=Math.min(...ys), ay1=Math.max(...ys);
+  // 实际范围与分位范围的比值：若长尾远得离谱，就不纳入
+  const tailRatio=(a,b,c,d)=>{
+    const body=Math.max(b-a, d-c);
+    const full=Math.max(ax1-ax0, ay1-ay0);
+    return body>0 ? full/body : 1;
+  };
+  if(tailRatio(x0,x1,y0,y1) < 1.6){
+    // 长尾不夸张，直接纳入，曲线更完整
+    x0=Math.min(x0,ax0); x1=Math.max(x1,ax1);
+    y0=Math.min(y0,ay0); y1=Math.max(y1,ay1);
+  }
+
+  // 关键点：(-1,0) 判稳要点；原点用于观察包围关系
+  const mustContain=[{re:-1,im:0},{re:0,im:0}];
+
+  // 先由曲线确定尺度
+  let cxm=(x0+x1)/2, cym=(y0+y1)/2;
+  let halfSpan=Math.max((x1-x0)/2,(y1-y0)/2,1e-9);
+
+  // 纳入关键点：在其距离不超过当前视野 2.5 倍时才纳入，
+  // 否则说明曲线本身离关键点极远，强行纳入会把曲线压成一点
+  for(const k of mustContain){
+    const dist=Math.hypot(k.re-cxm, k.im-cym);
+    if(dist<=halfSpan*2.5){
+      x0=Math.min(x0,k.re); x1=Math.max(x1,k.re);
+      y0=Math.min(y0,k.im); y1=Math.max(y1,k.im);
+      cxm=(x0+x1)/2; cym=(y0+y1)/2;
+      halfSpan=Math.max((x1-x0)/2,(y1-y0)/2,1e-9);
+    }
+  }
+
+  halfSpan*=1.10;                                      // 留白
+  state.ny.view={cx:cxm, cy:cym, half:halfSpan};
+}
+
+/* ===========================================================
+   计算与渲染
+   =========================================================== */
+/* 更新零极点坐标明细面板 */
+function renderZPPanel(){
+  const setList=(elId,arr,cls)=>{
+    const el=document.getElementById(elId);
+    if(!el) return;
+    if(!arr||!arr.length){
+      el.innerHTML='<div class="zp-row" style="color:#6b7686">（无）</div>';
+      return;
+    }
+    el.innerHTML=arr.map((r,i)=>{
+      const c=fmtComplex(r);
+      const pol=fmtPolar(r);
+      return '<div class="zp-row"><span class="zp-idx">'+(i+1)+'</span>'
+           + '<span class="'+cls+'">'+c+'</span>'
+           + '<span class="zp-polar">'+pol+'</span></div>';
+    }).join('');
+  };
+  const info=state.rl.data||{};
+  const poles=info.poles||[], zeros=info.zeros||[];
+  setList("zpPoles",poles,"");
+  setList("zpZeros",zeros,"");
+  const pc=document.getElementById("zpPoleCount"), zc=document.getElementById("zpZeroCount");
+  if(pc) pc.textContent=" ("+poles.length+")";
+  if(zc) zc.textContent=" ("+zeros.length+")";
+
+  // 系统信息：阶数、渐近线、分离点
+  const mi=document.getElementById("zpInfo");
+  if(mi){
+    const n=poles.length, m=zeros.length;
+    const rows=[];
+    rows.push('开环极点 <b>n = '+n+'</b>　开环零点 <b>m = '+m+'</b>');
+    const na=n-m;
+    if(na>0){
+      // 渐近线：角度与实轴交点
+      const sumP=poles.reduce((s,p)=>s+p.re,0), sumZ=zeros.reduce((s,z)=>s+z.re,0);
+      const sigma=(sumP-sumZ)/na;
+      const angs=[];
+      for(let k=0;k<na;k++){
+        let a=(2*k+1)*180/na;                   // K>0 的渐近线角
+        if(state.kSign<0) a=(2*k)*180/na;       // K<0 用 0° 族
+        angs.push(((a%360)+360)%360);
+      }
+      rows.push('渐近线 ' + angs.map(a=>a.toFixed(0)+'°').join('、')
+                + '　交点 σ = <b>'+parseFloat(sigma.toPrecision(4))+'</b>');
+    }else{
+      rows.push('渐近线：n = m，无渐近线');
+    }
+    // 分离点/会合点
+    try{
+      const bps=breakawayPoints(state.Nc,state.Dc,state.kSign);
+      if(bps.length){
+        rows.push('分离/会合点 ' + bps.map(b=>'<b>'+fmtComplex(b.s)+'</b> (K='+parseFloat(b.K.toPrecision(4))+')').join('　'));
+      }else{
+        rows.push('实轴分离点：无');
+      }
+    }catch(e){ /* 忽略 */ }
+    mi.innerHTML=rows.join('<br>');
+  }
+}
+
+function redraw(){
+  if(state.tab==="p-rl") drawRootLocus();
+  else { drawPolar(); drawBode(); }
+}
+function recompute(keepView){
+  const errEl=document.getElementById("err");
+  try{
+    const Nc=parsePoly(document.getElementById("in-num").value);
+    const Dc=parsePoly(document.getElementById("in-den").value);
+    if(Dc.length<2) throw new Error("分母必须含 s（正次多项式）");
+    state.Nc=Nc; state.Dc=Dc;
+    state.w1=Math.max(1e-4, parseFloat(document.getElementById("in-w").value)||0.01);
+    state.w2=Math.max(state.w1*10, parseFloat(document.getElementById("in-w2").value)||1000);
+    errEl.textContent="";
+
+    // 根轨迹：K 按 kSign 取正/负扫掠；箭头方向另由 kSign 控制
+    // K 上限不宜过大，否则远端轨迹会把视野撑开、原点的零极点挤成一团
+    const branches=computeRootLocus(Nc,Dc,state.kSign,1e4,220);
+    const info=fitRootLocus(branches,Nc,Dc);
+    state.rl.data={branches, zeros:info.zeros, poles:info.poles};
+    if(!keepView||!state.rl.view) state.rl.view={cx:info.cx, cy:info.cy, half:info.half};
+
+    // 频域
+    state.ny.data={freq:buildFreqPoints(Nc,Dc,state.w1,state.w2,900)};
+    if(state.ny.data.freq.length<2) throw new Error("频率范围内无有效响应");
+    if(!keepView||!state.ny.view) autoFitNY();
+  }catch(e){
+    errEl.textContent="⚠ "+e.message;
+    console.error(e);
+  }
+  try{ renderZPPanel(); }catch(e){ console.error(e); }
+  redraw();
+}
+
+/* ===========================================================
+   交互
+   =========================================================== */
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b===btn));
+    const target=btn.dataset.target;
+    state.tab=target;
+    document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id===target));
+    // canvas 在 display:none 下尺寸为 0，显示后必须重绘
+    requestAnimationFrame(()=>{
+      clearCanvas(document.getElementById("cv-rl"));
+      clearCanvas(document.getElementById("cv-pol"));
+      clearCanvas(document.getElementById("cv-bode"));
+      redraw();
+    });
+  });
+});
+
+// K 符号切换：轨迹形状随 K 符号改变（K>0 与 K<0 是两组不同轨迹），
+// 因此必须重新计算，而不能只重绘；同时复位视野以适配新轨迹。
+document.getElementById("k-pos").addEventListener("click",()=>{
+  if(state.kSign===1) return;
+  state.kSign=1;
+  document.getElementById("k-pos").classList.add("on");
+  document.getElementById("k-neg").classList.remove("on");
+  state.rl.view=null;
+  recompute(true);
+});
+document.getElementById("k-neg").addEventListener("click",()=>{
+  if(state.kSign===-1) return;
+  state.kSign=-1;
+  document.getElementById("k-neg").classList.add("on");
+  document.getElementById("k-pos").classList.remove("on");
+  state.rl.view=null;
+  recompute(true);
+});
+document.getElementById("w-pos") && document.getElementById("w-pos").addEventListener("click",()=>{
+  state.wSign=1; redraw();
+});
+document.getElementById("w-neg") && document.getElementById("w-neg").addEventListener("click",()=>{
+  state.wSign=-1; redraw();
+});
+
+document.getElementById("btn-apply").addEventListener("click",()=>{
+  state.rl.view=null; state.ny.view=null;
+  recompute(false);
+});
+document.getElementById("btn-reset").addEventListener("click",()=>{
+  state.rl.view=null; state.ny.view=null;
+  recompute(true);
+});
+// 零极点坐标面板开关：展开/收起后画布尺寸变化，需要重绘
+document.getElementById("btn-zp").addEventListener("click",()=>{
+  const p=document.getElementById("zpPanel");
+  const open=p.classList.toggle("open");
+  document.getElementById("btn-zp").classList.toggle("on",open);
+  requestAnimationFrame(()=>{
+    ["cv-rl","cv-pol","cv-bode"].forEach(id=>clearCanvas(document.getElementById(id)));
+    redraw();
+  });
+});
+["in-num","in-den"].forEach(id=>{
+  document.getElementById(id).addEventListener("keydown",e=>{
+    if(e.key==="Enter"){ state.rl.view=null; state.ny.view=null; recompute(false); }
+  });
+});
+
+/* ===========================================================
+   作者信息浮层：点击头像/署名切换显示
+   =========================================================== */
+(function initAuthorPop(){
+  const wrap=document.querySelector(".author");
+  const pop=document.getElementById("authorPop");
+  const av=document.querySelector(".author-avatar");
+  const popAv=document.getElementById("popAvatar");
+  if(!wrap||!pop||!av) return;
+
+  // 浮层内头像复用同一张图，避免重复内联 base64
+  if(popAv && av.getAttribute("src")) popAv.src=av.getAttribute("src");
+
+  const setOpen=(on)=>{
+    pop.classList.toggle("show",on);
+    wrap.classList.toggle("open",on);
+    av.setAttribute("aria-expanded",on?"true":"false");
+  };
+  const isOpen=()=>pop.classList.contains("show");
+
+  // 点击署名区（含头像）开合
+  wrap.addEventListener("click",(e)=>{
+    if(e.target.closest("#popCopy")) return;      // 复制按钮单独处理
+    e.stopPropagation();
+    setOpen(!isOpen());
+  });
+  // 点击其它地方关闭
+  document.addEventListener("click",(e)=>{
+    if(isOpen() && !wrap.contains(e.target)) setOpen(false);
+  });
+  // Esc 关闭
+  document.addEventListener("keydown",(e)=>{
+    if(e.key==="Escape" && isOpen()){ setOpen(false); av.focus(); }
+  });
+
+  // 复制 QQ 号（本地文件环境下 clipboard API 可能被禁用，故带回退方案）
+  const btn=document.getElementById("popCopy");
+  const qq=document.getElementById("popQQ");
+  if(btn && qq){
+    btn.addEventListener("click",async (e)=>{
+      e.stopPropagation();
+      const txt=qq.textContent.trim();
+      let ok=false;
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(txt); ok=true;
+        }
+      }catch(_){ ok=false; }
+      // 始终先选中号码：即使自动复制被浏览器禁止（file:// 下常见），
+      // 用户也能直接 Ctrl+C，无需手动拖选。
+      try{
+        const r=document.createRange(); r.selectNodeContents(qq);
+        const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        if(!ok && document.execCommand) ok=document.execCommand("copy");
+      }catch(_){ /* 忽略 */ }
+      const old=btn.textContent;
+      btn.textContent=ok?"已复制":"已选中，按 Ctrl+C";
+      setTimeout(()=>{ btn.textContent=old; }, 1600);
+    });
+  }
+})();
+
+function attachView(cv,getView,getMargins,isRL){
+  cv.addEventListener("wheel",e=>{
+    const v=getView(); if(!v) return;
+    e.preventDefault();
+    const r=cv.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    const m=getMargins();
+    const iw=cv.clientWidth-m.l-m.r, ih=cv.clientHeight-m.t-m.b;
+    const kOld=Math.min(iw,ih)/(2*v.half);
+    const dataX=v.cx+(mx-(m.l+iw/2))/kOld;
+    const dataY=v.cy-(my-(m.t+ih/2))/kOld;
+    const f=Math.exp(e.deltaY*0.0012);
+    const half=Math.max(1e-6,Math.min(1e9,v.half*f));
+    const kNew=Math.min(iw,ih)/(2*half);
+    v.cx=dataX-(mx-(m.l+iw/2))/kNew;      // 以光标为锚点
+    v.cy=dataY+(my-(m.t+ih/2))/kNew;
+    v.half=half;
+    redraw();
+  },{passive:false});
+
+  let drag=null;
+  cv.addEventListener("mousedown",e=>{
+    const v=getView(); if(!v) return;
+    drag={x:e.clientX,y:e.clientY,cx:v.cx,cy:v.cy};
+    cv.style.cursor="grabbing";
+  });
+  window.addEventListener("mousemove",e=>{
+    if(!drag) return;
+    const v=getView(); if(!v) return;
+    const m=getMargins();
+    const iw=cv.clientWidth-m.l-m.r, ih=cv.clientHeight-m.t-m.b;
+    const k=Math.min(iw,ih)/(2*v.half);
+    v.cx=drag.cx-(e.clientX-drag.x)/k;
+    v.cy=drag.cy+(e.clientY-drag.y)/k;
+    redraw();
+  });
+  window.addEventListener("mouseup",()=>{ if(drag){ drag=null; cv.style.cursor="crosshair"; } });
+  cv.addEventListener("dblclick",()=>{
+    state.rl.view=null; state.ny.view=null; recompute(true);
+  });
+}
+attachView(document.getElementById("cv-rl"),
+           ()=>state.rl.view, ()=>M_RL, true);
+attachView(document.getElementById("cv-pol"),
+           ()=>state.ny.view, ()=>M_POL, false);
+
+document.querySelectorAll(".vbtns button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    const v=state.tab==="p-rl"?state.rl.view:state.ny.view;
+    if(!v) return;
+    const a=b.dataset.v;
+    if(a==="in") v.half=Math.max(1e-6,v.half*0.75);
+    else if(a==="out") v.half=Math.min(1e9,v.half*1.3333);
+    else { state.rl.view=null; state.ny.view=null; recompute(true); return; }
+    redraw();
+  });
+});
+
+let rzT=null;
+function scheduleRedraw(){
+  clearTimeout(rzT);
+  rzT=setTimeout(()=>{
+    ["cv-rl","cv-pol","cv-bode"].forEach(id=>clearCanvas(document.getElementById(id)));
+    redraw();
+  },60);
+}
+window.addEventListener("resize",scheduleRedraw);
+
+/* 用 ResizeObserver 监听每个画布的尺寸变化：
+   canvas 的位图尺寸不会自动跟随 CSS 尺寸，切换 Tab / 窗口缩放 /
+   容器变化导致 0 -> 非0 时都必须重绘，否则会看到空白画布。 */
+if(typeof ResizeObserver!=="undefined"){
+  ["cv-rl","cv-pol","cv-bode"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    let lastW=0,lastH=0;
+    new ResizeObserver(()=>{
+      const w=el.clientWidth, h=el.clientHeight;
+      if(w!==lastW||h!==lastH){
+        lastW=w; lastH=h;
+        if(w>0&&h>0) scheduleRedraw();
+      }
+    }).observe(el);
+  });
+}
+
+/* 首次计算放到布局稳定之后：
+   若在脚本执行末尾立刻算，画布可能还没拿到最终尺寸，
+   自动视野会按错误尺寸估算。用 rAF + load 双保险。 */
+function firstRender(){
+  state.rl.view=null;
+  state.ny.view=null;
+  recompute(false);
+}
+if(document.readyState==="complete"){
+  requestAnimationFrame(firstRender);
+}else{
+  window.addEventListener("load",()=>requestAnimationFrame(firstRender));
+  // 兜底：即便 load 事件因某种原因未触发也要出图
+  setTimeout(()=>{ if(!state.rl.data) firstRender(); }, 300);
+}
+</script>
+</body>
+</html>
