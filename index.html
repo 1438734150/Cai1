@@ -67,7 +67,16 @@
      注意必须用 width/height:100% 而不是 auto：
      canvas 是替换元素，width:auto + left/right 约束会回退到固有尺寸，
      导致尺寸指数级膨胀。 */
-  .grid2{position:absolute;inset:0;display:grid;grid-template-rows:1fr 1fr;gap:1px;background:var(--line)}
+  /* 奈奎斯特/伯德页：左右并排 —— 左格幅相频（极坐标），右格伯德图。
+     伯德图内部再上下分幅频/相频。
+     宽度按 4:5 分配：极坐标图接近正方更合适，伯德图需要更宽以容纳
+     十倍频程刻度和右侧相位刻度。
+     窄屏（手机竖屏）空间不足以并排，改为上下堆叠（见媒体查询）。 */
+  .grid2{
+    position:absolute;inset:0;display:grid;
+    grid-template-columns:4fr 5fr;grid-template-rows:1fr;
+    gap:1px;background:var(--line);
+  }
   .cell{position:relative;background:var(--bg);min-height:0;overflow:hidden}
   .cell > canvas{
     position:absolute;left:0;top:26px;
@@ -89,6 +98,25 @@
     width:0;height:0;background:none;border-radius:0;
     border-left:8px solid #7fe3ff;border-top:5px solid transparent;border-bottom:5px solid transparent;
   }
+  /* 伯德图显示方式切换按钮 */
+  .legend-btn{
+    margin-left:auto;display:inline-flex;align-items:center;gap:5px;
+    background:#1b2230;color:var(--dim);
+    border:1px solid var(--line);border-radius:6px;
+    padding:3px 9px;font-size:11px;cursor:pointer;
+    transition:background .15s ease,color .15s ease,border-color .15s ease;
+    flex:0 0 auto;
+  }
+  .legend-btn:hover{color:#fff;border-color:var(--accent)}
+  .legend-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .legend-btn-icon{font-size:12px;line-height:1}
+  /* ω 方向切换：图例内的紧凑按钮，不参与 margin-left:auto 的推挤 */
+  .legend .legend-btn{
+    margin-left:0;padding:2px 7px;font-size:11px;
+    background:transparent;border-color:transparent;
+  }
+  .legend .legend-btn.on{background:#243244;color:#e8eef7;border-color:var(--line)}
+  .legend .legend-btn:hover{background:#1f2a3a;color:#fff;border-color:var(--line)}
   canvas{
     display:block;cursor:crosshair;
     /* 触摸手势全部交给脚本处理（单指平移、双指缩放），
@@ -178,9 +206,59 @@
   }
   .author-pop .pop-copy:hover{color:#fff;border-color:var(--accent)}
 
+  /* 纯滞后环节提示条 */
+  .delay-note{
+    display:none;
+    padding:7px 16px;font-size:12px;line-height:1.55;
+    background:rgba(255,179,64,.10);
+    border-bottom:1px solid rgba(255,179,64,.28);
+    color:#ffd9a0;
+  }
+  .delay-note.show{display:block}
+  .delay-note b{color:#ffb340;font-weight:600}
+
+  /* 输入联想下拉。
+     关键点：浮层挂在 <body> 上、用 position:fixed 定位，
+     而不是作为 .bar 的子元素绝对定位——
+     因为窄屏下 .bar 是 overflow-x:auto / overflow-y:hidden 的横向滚动条，
+     子元素绝对定位会被它按 overflow 裁掉（实测露出不到 10px）。
+     挂到 body 后浮层完全脱离滚动容器，不受任何祖先 overflow 影响。 */
+  .ac-wrap{position:relative;display:inline-block}
+  .ac-list{
+    position:fixed;z-index:200;
+    min-width:132px;max-height:186px;overflow-y:auto;
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+    background:#161b24;
+    border:1px solid #2f3a49;border-radius:7px;
+    box-shadow:0 8px 22px rgba(0,0,0,.55);
+    padding:3px;display:none;
+  }
+  .ac-list.show{display:block}
+  .ac-item{
+    display:flex;align-items:center;gap:8px;
+    padding:4px 8px;border-radius:5px;cursor:pointer;
+    font:13px ui-monospace,Consolas,"Courier New",monospace;
+    color:#d8e0ea;white-space:nowrap;
+    /* 触屏上长按可能触发选中/放大，这里统一禁止 */
+    -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;
+    touch-action:manipulation;
+  }
+  .ac-item .ac-sym{font-weight:600;color:#8fd3ff;min-width:42px}
+  .ac-item .ac-desc{font-size:11px;color:#7d8899;font-family:"Segoe UI","Microsoft YaHei",sans-serif}
+  .ac-item.sel,.ac-item:hover,.ac-item:active{background:#20304a}
+  .ac-item:active{background:#2a3d5c}
+  /* 触屏专用操作提示 */
+  .ac-tip{
+    margin-top:3px;padding:5px 8px 3px;
+    border-top:1px solid #232b37;
+    font:11px "Segoe UI","Microsoft YaHei",sans-serif;
+    color:#6b7686;text-align:center;
+  }
+  .ac-item.sel .ac-sym{color:#fff}
+
   /* 零极点坐标面板：正常文档流元素，展开时把画布往下推 */
-  .zp-panel{
-    display:none;gap:26px;flex-wrap:wrap;align-items:flex-start;
+  .zp-panel{    display:none;gap:26px;flex-wrap:wrap;align-items:flex-start;
     padding:9px 16px 11px;background:#10141b;
     border-bottom:1px solid var(--line);
     font-size:12px;flex:0 0 auto;
@@ -214,6 +292,14 @@
     .cell > canvas{top:30px;height:calc(100% - 30px)}
     .author-pop{min-width:200px}
     .author-pop .pop-copy{padding:4px 9px;font-size:11.5px}
+    /* 输入联想：触屏上加大到易点尺寸。
+       行高按 44px 触控目标标定（font 15px + 上下 padding 13px ≈ 47px），
+       并限制高度，避免候选多时把浮层撑出屏幕。 */
+    .ac-item{padding:13px 12px;font-size:15px;gap:9px;min-height:44px;box-sizing:border-box}
+    .ac-item .ac-sym{min-width:26px;font-size:16px}
+    .ac-item .ac-desc{font-size:12px}
+    .ac-list{max-height:42vh;padding:5px;min-width:150px}
+    .ac-tip{font-size:11.5px;padding:6px 8px 4px}
   }
 
   /* 窄屏：把顶部工具区改为可横向滚动，避免挤成多行占满屏 */
@@ -238,6 +324,10 @@
 
     .zp-panel{gap:18px;max-height:38vh;padding:8px 12px 10px}
     .zp-col{min-width:132px}
+
+    /* 窄屏无法并排显示两图：改回上下堆叠，各占一半高度。
+       并排会让每格只有 180~220px 宽，十倍频程刻度全部糊在一起。 */
+    .grid2{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
   }
 
   /* 超窄屏（竖屏手机）：进一步压缩 */
@@ -288,8 +378,8 @@
 </header>
 
 <div class="bar">
-  <label>N(s) 分子<input id="in-num" type="text" value="1"></label>
-  <label>D(s) 分母<input id="in-den" type="text" value="s(s+2)(s+5)"></label>
+  <label>N(s) 分子<span class="ac-wrap"><input id="in-num" type="text" value="1" autocomplete="off" spellcheck="false"><div class="ac-list" id="ac-num"></div></span></label>
+  <label>D(s) 分母<span class="ac-wrap"><input id="in-den" type="text" value="s(s+2)(s+5)" autocomplete="off" spellcheck="false"><div class="ac-list" id="ac-den"></div></span></label>
   <div class="seg">
     <button id="k-pos" class="on">K &gt; 0</button>
     <button id="k-neg">K &lt; 0</button>
@@ -299,8 +389,11 @@
   <button id="btn-reset">复位视图</button>
   <button id="btn-zp">零极点坐标</button>
   <span id="err"></span>
-  <span class="hint">滚轮缩放 · 拖拽平移 · 双击复位</span>
+  <span class="hint">滚轮缩放 · 拖拽平移 · 双击复位 · 输入框 Tab 联想</span>
 </div>
+
+<!-- 含纯滞后环节时的说明条（由脚本按需显示） -->
+<div id="delayNote" class="delay-note"></div>
 
 <!-- 零极点坐标明细面板 -->
 <div id="zpPanel" class="zp-panel">
@@ -324,9 +417,9 @@
     <div class="grid2">
       <div class="cell">
         <div class="legend">
-          <span><i class="sw solid"></i>ω&gt;0</span>
-          <span><i class="sw dashed"></i>ω&lt;0（镜像）</span>
-          <span><i class="sw arrow"></i>箭头指向 ω 增大方向</span>
+          <button id="w-pos" class="legend-btn on" title="按 ω&gt;0 方向：曲线上箭头指向 ω 增大方向"><span><i class="sw solid"></i>ω&gt;0</span></button>
+          <button id="w-neg" class="legend-btn" title="按 ω&lt;0 方向：曲线上箭头指向 ω 减小方向"><span><i class="sw dashed"></i>ω&lt;0（镜像）</span></button>
+          <span id="wArrowHint"><i class="sw arrow"></i>箭头指向 ω 增大方向</span>
         </div>
         <canvas id="cv-pol"></canvas>
       </div>
@@ -334,6 +427,10 @@
         <div class="legend">
           <span><i class="sw mag"></i>幅频 L(ω) dB</span>
           <span><i class="sw ph"></i>相频 φ(ω) °</span>
+          <button id="btn-bode-mode" class="legend-btn" title="切换幅频/相频的显示方式">
+            <span id="bodeModeText">分图显示</span>
+            <span class="legend-btn-icon">⇅</span>
+          </button>
         </div>
         <canvas id="cv-bode"></canvas>
       </div>
@@ -374,12 +471,70 @@ function pDeriv(c){                       // 求导（降幂）
 }
 
 /* 解析多项式字符串：支持 s、数字、+ - * /、括号、^、j */
-function parsePoly(str){
+/* ===========================================================
+   表达式解析
+   -----------------------------------------------------------
+   支持 s、数字、+ - * / ^、括号、j，以及纯滞后环节 e^(-τs)。
+
+   关于延迟环节的处理（重要）：
+     e^(-τs) 是超越函数，含它的特征方程 D(s)+K·N(s)e^(-τs)=0
+     有无穷多个根，不能用多项式求根。
+
+     本工具的处理方式：
+       · 频域（伯德图 / 奈奎斯特图）：直接用 s=jω 代入，
+         延迟因子 e^(-jωτ) 幅值为 1、相位为 -ωτ —— 精确，无需近似。
+       · 根轨迹：无法计算（超越方程），选中根轨迹时给出明确提示，
+         并引导用户改用频域分析。
+   =========================================================== */
+
+/* 解析结果：
+     { poly:[...],           多项式形式（无延迟时）
+       delay:0 或 τ,         纯滞后时间常数
+       delayRaw:"" }         延迟的原始写法（用于提示）
+   若表达式含延迟，poly 为不含延迟的部分，delay 为 τ。 */
+function parsePoly(str){ return parseExpr(str).poly; }
+
+function parseExpr(str){
   let src=String(str||"").replace(/\s+/g,"");
   if(src==="") src="1";
   src=src.replace(/\*\*/g,"^");
-  src=src.replace(/(\d|\))(?=[a-zA-Z(])/g,"$1*");   // 2s -> 2*s, )s -> )*s
-  src=src.replace(/([a-zA-Z])(?=[a-zA-Z(])/g,"$1*"); // s( -> s*(
+
+  /* 延迟环节在解析前先整体摘出来，避免被当成普通字母处理。
+     支持这些写法（^ 可省略，指数可带括号）：
+       e^(-2s)   e^(-2*s)   e^(-2s)   e^-2s
+       exp(-2s)  exp(-2*s)  exp(-0.5s)
+       e^(-s)    exp(-s)                      （省略系数 1）
+     用 @@ 占位（不含字母数字，不会被隐式乘法正则拆开），τ 记在 delay 里。 */
+  let delay=0, delayRaw="";
+  const grabDelay=(m,tau)=>{
+    if(!delayRaw) delayRaw=m;
+    delay += (tau==="" || tau===undefined) ? 1 : parseFloat(tau);
+    return "@@";
+  };
+  // 1) 带 ^ 且带括号：e^(...) / exp^(...)
+  src=src.replace(/(?:exp|e)\s*\^\s*\(\s*-\s*([0-9.]*)\s*\*?\s*s\s*\)/g, grabDelay);
+  // 2) 带 ^ 但不带括号：e^-2s / exp^-2s
+  src=src.replace(/(?:exp|e)\s*\^\s*-\s*([0-9.]*)\s*\*?\s*s\b/g, grabDelay);
+  // 3) exp(...) 不带 ^：exp(-2s) / exp(-0.5s) / exp(-s)
+  src=src.replace(/exp\s*\(\s*-\s*([0-9.]*)\s*\*?\s*s\s*\)/g, grabDelay);
+
+  /* 隐式乘法补全。
+     先把"科学计数法数字"和"延迟占位符"用临时标记保护起来，
+     否则正则会把 1e-3 拆成 1*e-3、把 @@ 拆开。
+     处理完再还原。 */
+  const sciStore=[];
+  // 保护科学计数法：1e-3 / 2.5E8 / 1e+6
+  src=src.replace(/\d+(?:\.\d+)?[eE][+\-]?\d+/g, (m)=>{
+    sciStore.push(m);
+    return "\u0001"+(sciStore.length-1)+"\u0001";
+  });
+  // 补隐式乘法
+  src=src.replace(/(\d|\))@@/g,"$1*@@");           // 2@@ -> 2*@@
+  src=src.replace(/@@(?=[a-zA-Z(@\u0001])/g,"@@*"); // @@s -> @@*s
+  src=src.replace(/(\d|\))(?=[a-zA-Z(])/g,"$1*");
+  src=src.replace(/([a-zA-Z])(?=[a-zA-Z(])/g,"$1*");
+  // 还原科学计数法
+  src=src.replace(/\u0001(\d+)\u0001/g, (m,idx)=>sciStore[+idx]);
 
   let i=0;
   const peek=()=>src[i];
@@ -427,7 +582,13 @@ function parsePoly(str){
       i++;
       let e="";
       if(peek()==="("){ i++; while(i<src.length&&src[i]!==")") e+=src[i++]; eat(")"); }
-      else { while(i<src.length && /[0-9.\-]/.test(src[i])) e+=src[i++]; }
+      else {
+        // 指数只允许：可选前导负号 + 数字串（可含小数点）。
+        // 不能贪婪吞掉后续的 '-'(如 s^2-3s 中的减号)，否则 parseFloat("2-3")
+        // 会得到 2 并把 "-3s" 整项丢掉。
+        if(peek()==="-") e+=src[i++];
+        while(i<src.length && /[0-9.]/.test(src[i])) e+=src[i++];
+      }
       const k=parseFloat(e);
       if(!isFinite(k)||k<0||Math.abs(k-Math.round(k))>1e-9) throw new Error("幂次须为非负整数: "+e);
       let o=[1];
@@ -438,11 +599,33 @@ function parsePoly(str){
   }
   function atom(){
     if(peek()==="("){ i++; const v=expr(); eat(")"); return v; }
+    // 延迟占位符：数学上相当于常数 1（延迟已单独记录在 delay 中）
+    if(src.startsWith("@@",i)){ i+=2; return [1]; }
     if(peek()==="s"){ i++; return [1,0]; }
     if(peek()==="j"){ i++; return [1e-12,1]; }
     if(peek()!==undefined && /[0-9.]/.test(peek())){
       let s="";
-      while(i<src.length && /[0-9.eE]/.test(src[i])) s+=src[i++];
+      // 科学计数法状态机：数字段 -> (e/E) -> 可选符号 -> 指数数字段
+      // 只有"e/E 后面紧跟数字或 +/-数字"才算科学计数法；
+      // 否则 e 属于延迟项（如 2e^(-2s)），留给后面的 @@ 处理。
+      let seenE=false, seenSign=false;
+      while(i<src.length){
+        const ch=src[i];
+        if(/[0-9]/.test(ch)){ s+=ch; i++; continue; }
+        if(ch==="." && !seenE){ s+=ch; i++; continue; }
+        if((ch==="e"||ch==="E") && !seenE && s.length>0 && /[0-9.]/.test(s[s.length-1])){
+          const n1=src[i+1]||"";
+          if(/[0-9]/.test(n1)){ s+=ch; i++; seenE=true; continue; }
+          if((n1==="+"||n1==="-") && /[0-9]/.test(src[i+2]||"")){
+            s+=ch; i++; seenE=true; continue;
+          }
+        }
+        if((ch==="+"||ch==="-") && seenE && !seenSign && s.length>0){
+          const prev=s[s.length-1];
+          if(prev==="e"||prev==="E"){ s+=ch; i++; seenSign=true; continue; }
+        }
+        break;
+      }
       const v=parseFloat(s);
       if(!isFinite(v)) throw new Error("非法数字: "+s);
       return [v];
@@ -452,7 +635,21 @@ function parsePoly(str){
 
   const res=expr();
   if(i<src.length) throw new Error("多余字符: "+src.slice(i));
-  return pTrim(res);
+  return { poly:pTrim(res), delay, delayRaw };
+}
+
+/* 精确频率响应中的延迟因子：G(jω) 再乘 e^(-jωτ)。
+   幅值恒为 1（不衰减），相位附加 -ωτ。
+   这是解析精确值，伯德图与奈奎斯特图都用它，无需任何近似。 */
+function applyDelayToFreq(H, w, tau){
+  if(!tau) return H;
+  const ph=-w*tau;
+  return {
+    re: H.re*Math.cos(ph) - H.im*Math.sin(ph),
+    im: H.re*Math.sin(ph) + H.im*Math.cos(ph),
+    mag: H.mag,                              // |e^(-jωτ)| = 1
+    ph: H.ph + ph
+  };
 }
 
 /* ===========================================================
@@ -893,19 +1090,34 @@ function freqResponse(Nc,Dc,w){
     ph:Math.atan2(N.im,N.re)-Math.atan2(D.im,D.re)
   };
 }
-function buildFreqPoints(Nc,Dc,w1,w2,nPts){
+/* 频率响应：可带纯滞后环节。
+   tau>0 时在 G(jω) 上乘 e^(-jωτ)（幅值不变、相位 -ωτ）。
+   相位先做解缠绕再叠加延迟相位，避免延迟引起的大幅跳变被误判。 */
+function buildFreqPoints(Nc,Dc,w1,w2,nPts,tau){
   const pts=[];
   const l1=Math.log10(Math.max(w1,1e-8));
   const l2=Math.log10(Math.max(w2,Math.max(w1,1e-8)*1.0001));
   for(let i=0;i<=nPts;i++){
     const w=Math.pow(10, l1+(l2-l1)*i/nPts);
-    const H=freqResponse(Nc,Dc,w);
+    let H=freqResponse(Nc,Dc,w);
     if(!isFinite(H.mag)) continue;
+    // 先对无延迟部分做相位连续化
     let ph=H.ph;
-    if(pts.length){                       // 相位连续化（解缠绕）
+    if(pts.length){
       const last=pts[pts.length-1].ph;
       while(ph-last>Math.PI) ph-=2*Math.PI;
       while(ph-last<-Math.PI) ph+=2*Math.PI;
+    }
+    // 再叠加延迟：G(jω)·e^(-jωτ)。
+    // 注意实部/虚部也要按 -ωτ 旋转——奈奎斯特图用的是直角坐标，
+    // 只改相位而不同步旋转 re/im 会导致幅相频曲线与伯德图不一致。
+    if(tau){
+      const dph=-w*tau;
+      const cs=Math.cos(dph), sn=Math.sin(dph);
+      const re2=H.re*cs - H.im*sn;
+      const im2=H.re*sn + H.im*cs;
+      H={re:re2, im:im2, mag:H.mag, ph:H.ph+dph};
+      ph += dph;
     }
     pts.push({w, re:H.re, im:H.im, mag:H.mag, ph});
   }
@@ -1055,7 +1267,13 @@ const state={
   w1:0.01, w2:1000,
   tab:"p-rl",
   rl:{view:null, data:null},
-  ny:{view:null, data:null}
+  ny:{view:null, data:null},
+  /* 伯德图显示方式：
+     "split"   = 上幅频、下相频（两格分开，默认）
+     "merged"  = 幅频与相频叠加在同一张图（双纵轴）
+     mix 是融合动画的进度 0→1：0 完全分离，1 完全合并。
+     用连续插值让两种状态之间的切换有平滑过渡，而不是硬切。 */
+  bode:{ mode:"split", mix:0, animating:false }
 };
 
 const M_RL_BASE={l:56,r:24,t:34,b:38};   // t 留出图例条高度，避免坐标标注与图例重叠
@@ -1238,12 +1456,165 @@ function drawZeroPoleLabels(ctx, list, type, map, placedLabels, iw, ih){
   ctx.restore();
 }
 
+/* 为一个"特征点"放置文字标签，带避让与边界钳位。
+   与零极点标注共用同一套已放置列表，避免互相压住。 */
+function placeFeatureLabel(ctx, txt, q, color, placedLabels, iw, ih, M){
+  ctx.save();
+  ctx.font="600 11px Consolas,\"Cascadia Mono\",\"Microsoft YaHei\",monospace";
+  const w=ctx.measureText(txt).width+10, h=16;
+  const mkBox=(tx,ty,al,bl)=>{
+    const x0 = al==="left"? tx : al==="right"? tx-w : tx-w/2;
+    const y0 = bl==="bottom"? ty-h : ty;
+    return {x0,y0,x1:x0+w,y1:y0+h};
+  };
+  const overlap=(a,b)=>!(a.x1<b.x0+3||a.x0>b.x1-3||a.y1<b.y0+2||a.y0>b.y1-2);
+  // 候选位置：优先左右不同高度错开，再上下
+  const cands=[];
+  const rows=[10, 24, 38, 52, 66];
+  for(const dy of rows){
+    cands.push([q.x+12, q.y-dy, "left",  "bottom"]);
+    cands.push([q.x-12, q.y-dy, "right", "bottom"]);
+  }
+  for(const dy of rows){
+    cands.push([q.x+12, q.y+dy, "left",  "top"]);
+    cands.push([q.x-12, q.y+dy, "right", "top"]);
+  }
+  const inBounds=(b)=> b.x0>=M.l+1 && b.x1<=M.l+iw-1 && b.y0>=M.t+16 && b.y1<=M.t+ih-1;
+  let chosen=null;
+  for(const [tx,ty,al,bl] of cands){
+    const box=mkBox(tx,ty,al,bl);
+    if(!inBounds(box)) continue;
+    if(placedLabels.some(o=>overlap(box,o))) continue;
+    chosen={tx,ty,al,bl,box}; break;
+  }
+  if(!chosen){                      // 兜底：只要求不越界
+    for(const [tx,ty,al,bl] of cands){
+      const box=mkBox(tx,ty,al,bl);
+      if(!inBounds(box)) continue;
+      chosen={tx,ty,al,bl,box}; break;
+    }
+  }
+  if(!chosen){ ctx.restore(); return; }
+  placedLabels.push(chosen.box);
+
+  // 引导线
+  const ax = chosen.al==="left"? chosen.box.x0 : chosen.al==="right"? chosen.box.x1 : chosen.tx;
+  const ay = chosen.bl==="bottom"? chosen.box.y1 : chosen.box.y0;
+  if(Math.hypot(ax-q.x, ay-q.y) > 16){
+    ctx.strokeStyle=color; ctx.globalAlpha=0.5; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(q.x,q.y); ctx.lineTo(ax,ay); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  // 圆角底衬 + 文字
+  const bx=chosen.box;
+  ctx.fillStyle="rgba(10,13,18,.86)";
+  ctx.beginPath();
+  const rr=4, x0=bx.x0-3, y0=bx.y0-1, ww=bx.x1-bx.x0+6, hh=bx.y1-bx.y0+2;
+  ctx.moveTo(x0+rr,y0);
+  ctx.lineTo(x0+ww-rr,y0); ctx.quadraticCurveTo(x0+ww,y0,x0+ww,y0+rr);
+  ctx.lineTo(x0+ww,y0+hh-rr); ctx.quadraticCurveTo(x0+ww,y0+hh,x0+ww-rr,y0+hh);
+  ctx.lineTo(x0+rr,y0+hh); ctx.quadraticCurveTo(x0,y0+hh,x0,y0+hh-rr);
+  ctx.lineTo(x0,y0+rr); ctx.quadraticCurveTo(x0,y0,x0+rr,y0);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle=color;
+  ctx.textAlign=chosen.al; ctx.textBaseline=chosen.bl;
+  ctx.fillText(txt, chosen.tx, chosen.ty);
+  ctx.restore();
+}
+
+/* 求根轨迹与【虚轴】的交点。
+   虚轴是稳定边界，交点即临界增益对应的闭环极点。
+
+   做法：令 s=jω 代入特征方程 D(s)+K·N(s)=0，得
+       Dr + K·Nr = 0 ,  Di + K·Ni = 0
+   其中 D(jω)=Dr+jDi，N(jω)=Nr+jNi。
+   消去 K 得关于 ω 的条件： Dr·Ni − Di·Nr = 0
+   对数扫描找变号区间 + 二分细化求 ω，再回代得 K。 */
+function imagAxisCrossings(Nc, Dc){
+  const out=[];
+  if(!Nc || !Dc) return out;
+
+  const f=(w)=>{
+    const D=polyVal(Dc,w), N=polyVal(Nc,w);
+    return D.re*N.im - D.im*N.re;
+  };
+  const wMin=1e-6, wMax=1e8, STEPS=4000;
+  const roots=[];
+  let prevW=wMin, prevF=f(wMin);
+  for(let i=1;i<=STEPS;i++){
+    const w=wMin*Math.pow(wMax/wMin, i/STEPS);
+    const cur=f(w);
+    if(isFinite(prevF) && isFinite(cur)){
+      if(prevF===0){ roots.push(prevW); }
+      else if(prevF*cur<0){
+        // 二分（对数中点）细化
+        let a=prevW, b=w, fa=prevF;
+        for(let k=0;k<60;k++){
+          const mid=Math.sqrt(a*b);
+          const fm=f(mid);
+          if(fa*fm<=0){ b=mid; } else { a=mid; fa=fm; }
+        }
+        roots.push(Math.sqrt(a*b));
+      }
+    }
+    prevW=w; prevF=cur;
+  }
+
+  // 回代求 K，只保留 K>0 的解
+  for(const w of roots){
+    const D=polyVal(Dc,w), N=polyVal(Nc,w);
+    const den=N.re*N.re+N.im*N.im;
+    if(den<1e-300) continue;
+    const K=-(D.re*N.re+D.im*N.im)/den;
+    if(!isFinite(K) || K<=1e-9) continue;
+    // 校验确为特征方程的根
+    const chk=polyVal(pAdd(Dc.slice(), Nc.map(v=>v*K)), w);
+    if(Math.hypot(chk.re,chk.im) > 1e-6*Math.max(1,Math.abs(K))) continue;
+    out.push({ im:w, K });                     // s = jω
+  }
+  // 去重
+  const uniq=[];
+  for(const p of out){
+    if(uniq.some(q=>Math.abs(q.im-p.im) < 1e-6*Math.max(1,Math.abs(p.im)))) continue;
+    uniq.push(p);
+  }
+  return uniq;
+}
+
 function drawRootLocus(){
   const cv=document.getElementById("cv-rl");
   const {ctx,W,H}=setupCanvas(cv);
   if(!ctx) return;
   const view=state.rl.view;
-  if(!view||!state.rl.data) return;
+  if(!view||!state.rl.data){
+    /* 含纯滞后时根轨迹不可用：在画布上给出说明，而不是留一片空白。 */
+    if(ctx && state.tau>0){
+      ctx.save();
+      ctx.fillStyle="#8b98a9";
+      ctx.font='13px "Segoe UI","Microsoft YaHei",sans-serif';
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      const cx=W/2, cy=H/2;
+      const lines=[
+        "含纯滞后环节 e^(−τs) 时无法绘制根轨迹",
+        "",
+        "特征方程 D(s)+K·N(s)·e^(−τs)=0 是超越方程，",
+        "有无穷多个根，不能归结为多项式求根问题。",
+        "",
+        "请使用「奈奎斯特 / 伯德」页做频域分析——",
+        "该页对延迟作精确计算（幅值不变、相位 −ωτ）。"
+      ];
+      ctx.fillStyle="#ffb340";
+      ctx.font='600 15px "Segoe UI","Microsoft YaHei",sans-serif';
+      ctx.fillText(lines[0], cx, cy-lines.length*9);
+      ctx.font='12.5px "Segoe UI","Microsoft YaHei",sans-serif';
+      ctx.fillStyle="#8b98a9";
+      for(let k=1;k<lines.length;k++){
+        if(lines[k]) ctx.fillText(lines[k], cx, cy-lines.length*9 + k*20);
+      }
+      ctx.restore();
+    }
+    return;
+  }
   const {iw,ih,map}=rlMap(cv,view);
 
   drawComplexGrid(ctx,M_RL,iw,ih,view,map);
@@ -1289,8 +1660,58 @@ function drawRootLocus(){
   drawZPSymbol(state.rl.data.poles,"pole");
   drawZPSymbol(state.rl.data.zeros,"zero");
 
-  // 坐标标注：极点先标（数量少且更关键），零点后标
+  /* 标注顺序很重要：特征点（分离点、虚轴交点）信息量更大，
+     先给它们占位，零极点标签随后避让；
+     否则零极点标签先铺满，特征点标签会被挤到相近位置而互相重叠。 */
   const placedLabels=[];
+
+  /* 关键特征点标注：分离点/会合点、与虚轴的交点。
+     这两类点在画根轨迹时最常被问到，直接标在图上省去手算。 */
+
+  // —— 分离点 / 会合点（由 dK/ds=0 解析求出）——
+  let bps=[];
+  try{ bps=breakawayPoints(state.Nc, state.Dc, state.kSign)||[]; }catch(_){ bps=[]; }
+  bps.forEach(bp=>{
+    const q=map(bp.s.re, bp.s.im);
+    if(!isFinite(q.x)||!isFinite(q.y)) return;
+    ctx.save();
+    ctx.fillStyle="#7ee787";                    // 绿色，与红轨迹、橙极点区分
+    ctx.strokeStyle="#0e1116"; ctx.lineWidth=1.5;
+    const r=5;
+    ctx.beginPath();
+    ctx.moveTo(q.x, q.y-r); ctx.lineTo(q.x+r, q.y);
+    ctx.lineTo(q.x, q.y+r); ctx.lineTo(q.x-r, q.y);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    const txt = "分离点 " + fmtComplex(bp.s) + "  K=" + parseFloat(bp.K.toPrecision(4));
+    placeFeatureLabel(ctx, txt, q, "#7ee787", placedLabels, iw, ih, M_RL);
+  });
+
+  // —— 与虚轴的交点（令 s=jω 代入特征方程求解）——
+  // 实系数系统的虚轴交点必共轭成对，两点都标出；标签只在上半平面那侧写，
+  // 避免同一组数据出现两条重复文字。
+  let axisPts=[];
+  try{ axisPts=imagAxisCrossings(state.Nc, state.Dc)||[]; }catch(_){ axisPts=[]; }
+  axisPts.forEach(pt=>{
+    for(const sign of [1,-1]){
+      const im = pt.im*sign;
+      const q=map(0, im);
+      if(!isFinite(q.x)||!isFinite(q.y)) continue;
+      ctx.save();
+      ctx.fillStyle="#ff7b9c";                    // 粉红，与其它标记区分
+      ctx.strokeStyle="#0e1116"; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(q.x, q.y, 4.5, 0, 2*Math.PI); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    // 只在 +j 侧放标签
+    const q=map(0, pt.im);
+    if(!isFinite(q.x)||!isFinite(q.y)) return;
+    const txt = "虚轴交点 s=±j" + parseFloat(Math.abs(pt.im).toPrecision(4))
+              + "  K=" + parseFloat(pt.K.toPrecision(4));
+    placeFeatureLabel(ctx, txt, q, "#ff7b9c", placedLabels, iw, ih, M_RL);
+  });
+
+  // 零极点坐标标注：放在特征点之后，自动避开已占用的位置
   drawZeroPoleLabels(ctx, state.rl.data.poles, "pole", map, placedLabels, iw, ih);
   drawZeroPoleLabels(ctx, state.rl.data.zeros, "zero", map, placedLabels, iw, ih);
 
@@ -1413,10 +1834,39 @@ function drawBode(){
   const narrow = W < 520;
   // 右侧要放得下 "−326°" 这类刻度，窄屏也不能压得太狠
   const m={ l: narrow?40:58, r: narrow?40:58, t: narrow?22:26, b: narrow?22:26 };
-  const gap = narrow?18:24;
   const iw=W-m.l-m.r;
-  const ih=(H-m.t-m.b-gap)/2;
-  const topY=m.t, botY=m.t+ih+gap;
+
+  /* 融合动画：mix=0 时上下分成两格；mix=1 时两格在纵向上重叠成一格。
+     做法是让两格的「高度」和「纵向偏移」随 mix 连续插值：
+       - 高度：ih_split -> ih_full
+       - 相频格的纵向起点：botY_split -> alignY
+     这样切换时两幅图会平滑地互相靠拢、合并，而不是硬切。 */
+  const mix = Math.max(0, Math.min(1, state.bode && state.bode.mix || 0));
+
+  const gap = narrow?18:24;
+  // 分离态：两格各占一半
+  const ihSplit=(H-m.t-m.b-gap)/2;
+  // 合并态：两格各占满（重叠）
+  const ihFull=H-m.t-m.b;
+  // 高度按 mix 插值
+  const ih = ihSplit + (ihFull-ihSplit)*mix;
+
+  const topY=m.t;
+  // 相频格的纵向起点：分离态在下方，合并态与幅频格对齐
+  const botYSplit=m.t+ihSplit+gap;
+  const botY = botYSplit + (topY-botYSplit)*mix;
+
+  /* 幅频格的纵向位置：合并时略微上移，相频格略下移，
+     让两条曲线在同一张图里错开，不至于完全压在一起。 */
+  const dbShift = -mix*ihFull*0.06;      // 幅频上移
+  const phShift =  mix*ihFull*0.06;      // 相频下移
+  const topYdb = topY + dbShift;
+  const botYph = botY + phShift;
+
+  /* 透明度：分离态两格都完全不透明；
+     融合过程中让相频格保持可见（否则合并时看不到相频）。
+     这里用一个"半透明叠加"的做法：合并态时相频曲线用虚线并使底色透明。 */
+  const phAlpha = 1;                     // 相频始终可见，靠混色区分
 
   const lw0=Math.log10(state.w1), lw1=Math.log10(state.w2);
   const X=(lw)=>m.l+(lw-lw0)/(lw1-lw0)*iw;
@@ -1442,9 +1892,10 @@ function drawBode(){
   if(aMax-aMin < 20){ const c=(aMin+aMax)/2; aMin=c-10; aMax=c+10; }
   let sp=(aMax-aMin)*0.08||1;
   aMin-=sp; aMax+=sp;
-  let st=niceStep(aMax-aMin,5);
+  // 目标 9 个主刻度：跨度大时也能看清中间值（原来 5 个过稀）
+  let st=niceStep(aMax-aMin,9);
   aMin=Math.floor(aMin/st)*st; aMax=Math.ceil(aMax/st)*st;
-  const Ydb=(db)=>topY+ih-(db-aMin)/(aMax-aMin)*ih;
+  const Ydb=(db)=>topYdb+ih-(db-aMin)/(aMax-aMin)*ih;
 
   /* 相位范围：同样做分位裁剪。
      相位往往卷绕很多圈，全范围会让曲线几乎水平。 */
@@ -1460,16 +1911,27 @@ function drawBode(){
   if(pMax-pMin < 0.5){ const c=(pMin+pMax)/2; pMin=c-0.25; pMax=c+0.25; }
   let sp2=(pMax-pMin)*0.08||0.2;
   pMin-=sp2; pMax+=sp2;
-  const st2=niceStep(pMax-pMin,5);
+  let st2=niceStep(pMax-pMin,9);
   pMin=Math.floor(pMin/st2)*st2; pMax=Math.ceil(pMax/st2)*st2;
-  const Yph=(ph)=>botY+ih-(ph-pMin)/(pMax-pMin)*ih;
+  const Yph=(ph)=>botYph+ih-(ph-pMin)/(pMax-pMin)*ih;
 
   const sup=(d)=>{ const mp={"0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹","-":"⁻"};
     return String(d).split("").map(c=>mp[c]||c).join(""); };
 
   const frame=(y,h,unit)=>{
     ctx.save();
-    ctx.strokeStyle="#232b37"; ctx.lineWidth=1; ctx.strokeRect(m.l,y,iw,h);
+    /* 融合状态下两个框会重叠：只画外框，避免出现两层横线。
+       fadeTop 为真时略去顶边（与幅频框的底边重合）。 */
+    ctx.strokeStyle="#232b37"; ctx.lineWidth=1;
+    if(unit.fadeTop){
+      ctx.beginPath();
+      ctx.moveTo(m.l,y+h); ctx.lineTo(m.l,y);
+      ctx.moveTo(m.l+iw,y+h); ctx.lineTo(m.l+iw,y);
+      ctx.moveTo(m.l,y+h); ctx.lineTo(m.l+iw,y+h);
+      ctx.stroke();
+    }else{
+      ctx.strokeRect(m.l,y,iw,h);
+    }
     ctx.strokeStyle="#171e28";
     for(let d=Math.ceil(lw0); d<=Math.floor(lw1); d++){
       const x=X(d);
@@ -1481,25 +1943,103 @@ function drawBode(){
       ctx.textAlign="center"; ctx.textBaseline="top";
       for(let d=Math.ceil(lw0); d<=Math.floor(lw1); d++) ctx.fillText("10"+sup(d), X(d), y+h+5);
     }
-    // 单位标签放在框内左上角，省掉与图例重复的标题
+    // 单位标签：融合态下两格标题靠得很近，改为分别贴各自框的上/下缘
     ctx.font=FONTSM; ctx.fillStyle="#9fb0c6";
-    ctx.textAlign="left"; ctx.textBaseline="top";
-    ctx.fillText(unit.text, m.l+6, y+4);
+    ctx.textAlign="left"; ctx.textBaseline = unit.titleBottom ? "bottom" : "top";
+    const ty = unit.titleBottom ? (y+h-4) : (y+4);
+    ctx.fillText(unit.text, m.l+6, ty);
     ctx.restore();
   };
-  frame(topY,ih,{text:"幅频 [dB]", bottom:false});
-  frame(botY,ih,{text:"相频 [°]", bottom:true});
+  /* 两格的框：分离态各自独立；融合时相频框与幅频框逐渐重合。
+     融合到一定程度后，相频框只保留左右边与底边，避免出现两层横线。 */
+  frame(topYdb,ih,{text:"幅频 [dB]", bottom:false});
+  // 融合态下把相频标题压到框内底部，避免与幅频标题叠在一起
+  frame(botYph,ih,{text:"相频 [°]", bottom:true, fadeTop:mix>0.5, titleBottom:mix>0.5});
+
+  /* 幅频参考网格：每 20dB 一条细横线，让读数更清楚。
+     主刻度（st）已由左侧数字标出，这里只画次级线。 */
+  ctx.save();
+  ctx.strokeStyle="rgba(120,140,170,.10)"; ctx.lineWidth=1;
+  const subDb=20;                              // 次级网格间隔
+  for(let d=Math.ceil(aMin/subDb)*subDb; d<=aMax; d+=subDb){
+    if(Math.abs(d % st) < 1e-9) continue;      // 与主刻度重合的跳过
+    const y=Ydb(d);
+    ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(m.l+iw,y); ctx.stroke();
+  }
+  ctx.restore();
+
+  /* 相频参考线：每隔 90° 画一条虚线（0、-90、-180、-270 …）。
+     这是伯德图判稳的常用参考——相位穿越 -180° 处对应增益裕度。 */
+  ctx.save();
+  const d2r=Math.PI/180;
+  const degMin=pMin/d2r, degMax=pMax/d2r;
+  for(let deg=Math.ceil(degMin/90)*90; deg<=degMax; deg+=90){
+    const y=Yph(deg*d2r);
+    const isKey = (deg % 180 === 0);            // -180 是最关键的一条
+    ctx.setLineDash(isKey?[6,4]:[3,5]);
+    ctx.strokeStyle = isKey ? "rgba(255,179,64,.55)" : "rgba(120,140,170,.32)";
+    ctx.lineWidth = isKey ? 1.4 : 1;
+    ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(m.l+iw,y); ctx.stroke();
+    /* 角度值标在虚线【左端、框内】，避免与框外的坐标刻度数字重叠。
+       之前标在右端，和 m.l+iw+5 处的刻度数字挤在一起。 */
+    ctx.setLineDash([]);
+    ctx.font=FONTSM; ctx.fillStyle = isKey ? "#ffb340" : "#6b7686";
+    ctx.textAlign="left"; ctx.textBaseline="bottom";
+    ctx.fillText(deg+"°", m.l+4, y-2);
+  }
+  ctx.restore();
 
   // 幅频曲线
   if(pts.length>1){
     const dbPts=pts.filter(p=>isFinite(p.mag))
-                    .map(p=>({x:X(Math.log10(p.w)), y:Ydb(20*Math.log10(p.mag))}));
+                    .map(p=>({x:X(Math.log10(p.w)), y:Ydb(20*Math.log10(p.mag)),
+                              w:p.w, db:20*Math.log10(p.mag)}));
     ctx.save();
     ctx.lineWidth=2; ctx.strokeStyle="#35c1ff"; ctx.lineJoin="round";
     ctx.beginPath();
     dbPts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
     ctx.stroke(); ctx.restore();
     drawFlowArrows(ctx,dbPts,state.wSign,"#7fe3ff",4);
+
+    /* 标出幅频曲线与 0dB 轴的交点（幅值穿越频率 ωc）。
+       在最靠近 0dB 的两点之间做线性插值，得到较精确的 ωc。 */
+    let cross=null;
+    for(let i=1;i<dbPts.length;i++){
+      const a=dbPts[i-1], b=dbPts[i];
+      if((a.db>=0 && b.db<=0) || (a.db<=0 && b.db>=0)){
+        const t = Math.abs(b.db-a.db)<1e-12 ? 0 : (0-a.db)/(b.db-a.db);
+        const lw = Math.log10(a.w) + t*(Math.log10(b.w)-Math.log10(a.w));
+        cross={ w:Math.pow(10,lw), db:0 };
+        break;
+      }
+    }
+    if(cross){
+      const cx=X(Math.log10(cross.w)), cy=Ydb(0);
+      ctx.save();
+      // 标记点
+      ctx.fillStyle="#ffd166";
+      ctx.beginPath(); ctx.arc(cx,cy,4,0,2*Math.PI); ctx.fill();
+      ctx.strokeStyle="#0e1116"; ctx.lineWidth=1.5; ctx.stroke();
+      // 竖向虚线下引到相频格底部（融合态下也要落到画布底）
+      ctx.setLineDash([3,3]); ctx.strokeStyle="rgba(255,209,102,.65)"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx,botYph+ih); ctx.stroke();
+      ctx.setLineDash([]);
+      // 坐标文字：ωc 与 0dB
+      const label="ωc="+sig3(cross.w);
+      ctx.font="600 11px Consolas,\"Cascadia Mono\",monospace";
+      const tw=ctx.measureText(label).width;
+      // 文字框避免超出绘图区
+      let tx=cx+8, align="left";
+      if(tx+tw > m.l+iw-4){ tx=cx-8; align="right"; }
+      ctx.textAlign=align; ctx.textBaseline="bottom";
+      // 底衬
+      ctx.fillStyle="rgba(14,17,22,.85)";
+      const bx = align==="left"? tx-3 : tx-tw-3;
+      ctx.fillRect(bx, cy-16, tw+6, 14);
+      ctx.fillStyle="#ffd166";
+      ctx.fillText(label, tx, cy-4);
+      ctx.restore();
+    }
 
     // 相频曲线
     const phPts=pts.filter(p=>isFinite(p.ph))
@@ -1510,16 +2050,61 @@ function drawBode(){
     phPts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
     ctx.stroke(); ctx.restore();
     drawFlowArrows(ctx,phPts,state.wSign,"#ffd27f",4);
+
+    /* 标出相位穿越 -180° 的频率（相位穿越频率 ωg），
+       与增益裕度相关，是判稳常用量。 */
+    let pcross=null;
+    const phValid=pts.filter(p=>isFinite(p.ph));
+    for(let i=1;i<phValid.length && !pcross;i++){
+      const a=phValid[i-1], b=phValid[i];
+      for(const target of [-Math.PI, -3*Math.PI]){
+        if((a.ph>=target && b.ph<=target) || (a.ph<=target && b.ph>=target)){
+          const t=Math.abs(b.ph-a.ph)<1e-12?0:(target-a.ph)/(b.ph-a.ph);
+          const lw=Math.log10(a.w)+t*(Math.log10(b.w)-Math.log10(a.w));
+          pcross={ w:Math.pow(10,lw), deg:target*180/Math.PI };
+          break;
+        }
+      }
+    }
+    if(pcross){
+      const cx=X(Math.log10(pcross.w)), cy=Yph(pcross.deg*d2r);
+      ctx.save();
+      ctx.fillStyle="#ffb340";
+      ctx.beginPath(); ctx.arc(cx,cy,3.5,0,2*Math.PI); ctx.fill();
+      ctx.strokeStyle="#0e1116"; ctx.lineWidth=1.4; ctx.stroke();
+      const label="ωg="+sig3(pcross.w);
+      ctx.font="600 11px Consolas,\"Cascadia Mono\",monospace";
+      const tw=ctx.measureText(label).width;
+      let tx=cx+7, align="left";
+      if(tx+tw > m.l+iw-4){ tx=cx-7; align="right"; }
+      ctx.textAlign=align; ctx.textBaseline="bottom";
+      ctx.fillStyle="rgba(14,17,22,.85)";
+      const bx = align==="left"? tx-3 : tx-tw-3;
+      ctx.fillRect(bx, cy-15, tw+6, 13);
+      ctx.fillStyle="#ffb340";
+      ctx.fillText(label, tx, cy-3);
+      ctx.restore();
+    }
   }
 
   // 刻度
   ctx.save();
-  ctx.font=FONTSM; ctx.fillStyle="#7f8b9b";
+  /* 幅频刻度：用更密的目标刻度数（原来 5 个，跨 250dB 时每 50dB 才标一个，
+     读数不便）。这里取 8~10 个主刻度，数值更清楚。 */
+  ctx.font=FONTSM; ctx.fillStyle="#9aa7b6";
   ctx.textAlign="right"; ctx.textBaseline="middle";
   for(let d=aMin; d<=aMax+1e-9; d+=st){
     const y=Ydb(d);
-    ctx.fillText(Math.abs(d)<1e-9?"0":d.toFixed(st<1?1:0), m.l-6, y);
+    const txt = Math.abs(d)<1e-9 ? "0" : (Number.isInteger(d) ? String(d) : d.toFixed(1));
+    ctx.fillText(txt, m.l-6, y);
+    // 主刻度加一小段刻度线，便于对齐
+    ctx.strokeStyle="rgba(120,140,170,.35)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(m.l-4,y); ctx.lineTo(m.l,y); ctx.stroke();
   }
+  // 单位提示
+  ctx.font="10px \"Segoe UI\",\"Microsoft YaHei\",sans-serif";
+  ctx.fillStyle="#6b7686"; ctx.textAlign="right"; ctx.textBaseline="top";
+  ctx.fillText("dB", m.l-6, 2);
   // 相位刻度：紧贴绘图区右侧。
   // 窄屏时右侧留给刻度的宽度很有限，改用更紧凑的写法（去掉度数符号、缩小字号），
   // 否则 "−326°" 这类文本会被画布右缘裁掉。
@@ -1533,7 +2118,7 @@ function drawBode(){
     }
     // 用一个单位标签说明是角度
     ctx.fillStyle="#6b7686";
-    ctx.fillText("°", phTickX, topY-9);
+    ctx.fillText("°", phTickX, botYph-9);
   }else{
     const phDigits = (pMax-pMin)*180/Math.PI >= 60 ? 0 : 1;
     for(let d=pMin; d<=pMax+1e-9; d+=st2){
@@ -1577,58 +2162,86 @@ function drawBode(){
       - 把 (-1,0) 与原点作为必须纳入的点（除非它们离得极远）
       - 取包围这些点的最小等比圆
       这样既能看清曲线，又不会丢掉判稳所需的位置关系。 */
+/* 幅相频（奈奎斯特）自动视野 —— 聚焦曲线靠原点的部分。
+
+   背景：1/[s(s+2)(s+5)] 的 Nyquist 曲线几乎是一条从原点沿虚轴
+   向下延伸到 -10 的直线。这类"细长"曲线如果按全范围取景，
+   在等比坐标下必然是一根细线，四周大量空白，形状看不清。
+
+   既然曲线形状本身就细长，用户要的是"尽量放大"：
+   即取一个紧的窗口，只展示靠近原点的一段（ω 较大的部分，
+   含曲线终点 G(j∞)=0 与几个采样标注点），长尾伸出画面。
+
+   做法：取"曲线靠原点的前 K% 点"所在的最大半径作为窗口。
+   注意要用【沿曲线的采样顺序】而不是到原点的距离排序——
+   两者的语义不同，前者对应"ω 从大到小走多远"。 */
 function autoFitNY(){
   const pts=state.ny.data.freq.filter(p=>isFinite(p.re)&&isFinite(p.im)
                                        &&Math.abs(p.re)<1e6&&Math.abs(p.im)<1e6);
   if(!pts.length) return;
 
-  const q=(arr,f)=>{ const s=arr.slice().sort((a,b)=>a-b);
-    return s[Math.min(s.length-1, Math.max(0, Math.round(f*(s.length-1))))]; };
-  const xs=pts.map(p=>p.re), ys=pts.map(p=>p.im);
+  const dists=pts.map(p=>Math.hypot(p.re,p.im));
+  const sorted=dists.slice().sort((a,b)=>a-b);
+  const dMax=sorted[sorted.length-1]||0;
 
-  // 曲线主体：去掉 1% 的极端长尾
-  let x0=q(xs,0.01), x1=q(xs,0.99);
-  let y0=q(ys,0.01), y1=q(ys,0.99);
-  if(x1-x0<1e-9){ x0-=1e-6; x1+=1e-6; }
-  if(y1-y0<1e-9){ y0-=1e-6; y1+=1e-6; }
-
-  // 曲线外还有没有值得显示的部分？把 1%~99% 之外的点也算进"实际范围"，
-  // 用于判断视野是否漏掉了明显的曲线段
-  const ax0=Math.min(...xs), ax1=Math.max(...xs);
-  const ay0=Math.min(...ys), ay1=Math.max(...ys);
-  // 实际范围与分位范围的比值：若长尾远得离谱，就不纳入
-  const tailRatio=(a,b,c,d)=>{
-    const body=Math.max(b-a, d-c);
-    const full=Math.max(ax1-ax0, ay1-ay0);
-    return body>0 ? full/body : 1;
-  };
-  if(tailRatio(x0,x1,y0,y1) < 1.6){
-    // 长尾不夸张，直接纳入，曲线更完整
-    x0=Math.min(x0,ax0); x1=Math.max(x1,ax1);
-    y0=Math.min(y0,ay0); y1=Math.max(y1,ay1);
+  /* 沿曲线的累计弧长（按 ω 采样顺序，不是按到原点距离排序）。
+     这是曲线真实长度分布：
+       - ω 从大到小，曲线从原点附近沿虚轴向下延伸
+       - 累计到总弧长某比例处的半径，就是"曲线走了这么远"的位置
+     取总弧长的 ARC_FRAC 作为窗口，可得到一个与曲线几何相符的紧窗口。 */
+  const along=[0];
+  for(let i=1;i<pts.length;i++){
+    along.push(along[i-1]+Math.hypot(pts[i].re-pts[i-1].re, pts[i].im-pts[i-1].im));
   }
+  const totalArc=along[along.length-1]||0;
 
-  // 关键点：(-1,0) 判稳要点；原点用于观察包围关系
-  const mustContain=[{re:-1,im:0},{re:0,im:0}];
-
-  // 先由曲线确定尺度
-  let cxm=(x0+x1)/2, cym=(y0+y1)/2;
-  let halfSpan=Math.max((x1-x0)/2,(y1-y0)/2,1e-9);
-
-  // 纳入关键点：在其距离不超过当前视野 2.5 倍时才纳入，
-  // 否则说明曲线本身离关键点极远，强行纳入会把曲线压成一点
-  for(const k of mustContain){
-    const dist=Math.hypot(k.re-cxm, k.im-cym);
-    if(dist<=halfSpan*2.5){
-      x0=Math.min(x0,k.re); x1=Math.max(x1,k.re);
-      y0=Math.min(y0,k.im); y1=Math.max(y1,k.im);
-      cxm=(x0+x1)/2; cym=(y0+y1)/2;
-      halfSpan=Math.max((x1-x0)/2,(y1-y0)/2,1e-9);
+  /* 窗口半径：沿曲线从"靠原点的一端"（ω→∞ 那端）累计到总弧长的 10%。
+     实测 1/[s(s+2)(s+5)] 的对照：
+        弧长 5% -> R≈0.48   弧长 10% -> R≈0.99   弧长 20% -> R≈2.0
+     取 10% 可以得到约 ±1 的窗口——既能看清曲线靠原点的走向，
+     又比全范围（R≈10）放大了一个数量级，长尾自然出画。 */
+  const ARC_FRAC=0.10;
+  let half=0;
+  if(totalArc>0){
+    const target=totalArc*ARC_FRAC;
+    // 从 ω 最大端（索引末尾，G≈0）向 ω 小的一端走
+    for(let i=pts.length-1;i>=0;i--){
+      const walked=totalArc-along[i];       // 从末尾走到 i 已走的弧长
+      if(walked >= target){
+        half=Math.hypot(pts[i].re, pts[i].im);
+        break;
+      }
     }
   }
+  /* 若弧长法失败（曲线退化为一点等），退回一个与整体尺度相关的值。 */
+  if(!isFinite(half) || half<=0){
+    half = dMax>0 ? dMax*0.12 : 1e-3;
+  }
+  // 绝对下限
+  if(!isFinite(half) || half<=0) half = 1e-3;
 
-  halfSpan*=1.10;                                      // 留白
-  state.ny.view={cx:cxm, cy:cym, half:halfSpan};
+  // 留白：尽量放大，只留一点点
+  half *= 1.06;
+
+  /* 中心：让窗口尽量贴近曲线在原点附近的那一段。
+     取窗口内点的分位中心，并把中心拉向原点，
+     保证原点（曲线起点）附近始终可见。 */
+  const inside=pts.filter(p=>Math.hypot(p.re,p.im) <= half/1.06);
+  let cxm=0, cym=0;
+  if(inside.length){
+    const xs=inside.map(p=>p.re).sort((a,b)=>a-b);
+    const ys=inside.map(p=>p.im).sort((a,b)=>a-b);
+    const qq=(arr,f)=>arr[Math.min(arr.length-1, Math.max(0, Math.round(f*(arr.length-1))))];
+    cxm=(qq(xs,0.05)+qq(xs,0.95))/2;
+    cym=(qq(ys,0.05)+qq(ys,0.95))/2;
+  }
+  // 中心与原点距离不超过 half 的 30%，确保原点附近可见
+  const dOrig=Math.hypot(cxm,cym);
+  if(dOrig > half*0.30){
+    const s=half*0.30/dOrig;
+    cxm*=s; cym*=s;
+  }
+  state.ny.view={cx:cxm, cy:cym, half};
 }
 
 /* ===========================================================
@@ -1662,6 +2275,14 @@ function renderZPPanel(){
   // 系统信息：阶数、渐近线、分离点
   const mi=document.getElementById("zpInfo");
   if(mi){
+    /* 含纯滞后时没有根轨迹数据，只说明系统构成与延迟量。 */
+    if(!state.rl.data){
+      const tau=state.tau||0;
+      mi.innerHTML='纯滞后系统：G(s) = N(s)/D(s) · e^(−τs)，τ = <b>'+tau+'</b><br>'
+        + '含延迟的特征方程是超越方程，<b>不给出极点/零点/分离点</b>；<br>'
+        + '请切换到「奈奎斯特 / 伯德」页查看频域特性。';
+      return;
+    }
     const n=poles.length, m=zeros.length;
     const rows=[];
     rows.push('开环极点 <b>n = '+n+'</b>　开环零点 <b>m = '+m+'</b>');
@@ -1701,26 +2322,53 @@ function redraw(){
 }
 function recompute(keepView){
   const errEl=document.getElementById("err");
+  const noteEl=document.getElementById("delayNote");
   try{
-    const Nc=parsePoly(document.getElementById("in-num").value);
-    const Dc=parsePoly(document.getElementById("in-den").value);
+    const Nres=parseExpr(document.getElementById("in-num").value);
+    const Dres=parseExpr(document.getElementById("in-den").value);
+    const Nc=Nres.poly, Dc=Dres.poly;
     if(Dc.length<2) throw new Error("分母必须含 s（正次多项式）");
+    // 含延迟时，根轨迹无法计算（超越方程），只做频域分析
+    const tau=(Nres.delay||0)+(Dres.delay||0);
+    state.tau=tau;
     state.Nc=Nc; state.Dc=Dc;
     state.w1=Math.max(1e-4, parseFloat(document.getElementById("in-w").value)||0.01);
     state.w2=Math.max(state.w1*10, parseFloat(document.getElementById("in-w2").value)||1000);
     errEl.textContent="";
 
-    // 根轨迹：K 按 kSign 取正/负扫掠；箭头方向另由 kSign 控制
-    // K 上限不宜过大，否则远端轨迹会把视野撑开、原点的零极点挤成一团
-    const branches=computeRootLocus(Nc,Dc,state.kSign,1e4,220);
-    const info=fitRootLocus(branches,Nc,Dc);
-    state.rl.data={branches, zeros:info.zeros, poles:info.poles};
-    if(!keepView||!state.rl.view) state.rl.view={cx:info.cx, cy:info.cy, half:info.half};
+    if(tau>0){
+      /* —— 含纯滞后 e^(-τs)：只算频域 ——
+         频域用精确值（幅值不变、相位 -ωτ），不做任何近似。
+         根轨迹是超越方程（无穷多根），此处无法给出，改为提示。 */
+      state.rl.data=null;
+      state.ny.data={freq:buildFreqPoints(Nc,Dc,state.w1,state.w2,1400,tau)};
+      if(state.ny.data.freq.length<2) throw new Error("频率范围内无有效响应");
+      if(!keepView||!state.ny.view) autoFitNY();
+      if(noteEl){
+        const shown=(Nres.delayRaw||Dres.delayRaw||("e^(-"+tau+"s)"));
+        noteEl.innerHTML='已识别纯滞后 <b>'+shown+'</b>（τ='+tau+'）'
+          +'：频域为<b>精确</b>计算（幅值不变、相位 −ωτ）；'
+          +'<b>根轨迹不可用</b>——含延迟的特征方程是超越方程，有无穷多根，'
+          +'请改用奈奎斯特 / 伯德图判稳。';
+        noteEl.classList.add("show");
+      }
+      // 若当前停在根轨迹页，自动切到频域页，避免空白
+      if(state.tab==="p-rl"){
+        const btnNy=document.querySelector('.tab[data-target="p-ny"]');
+        if(btnNy) btnNy.click();
+      }
+    }else{
+      // —— 无延迟：常规多项式处理 ——
+      const branches=computeRootLocus(Nc,Dc,state.kSign,1e4,220);
+      const info=fitRootLocus(branches,Nc,Dc);
+      state.rl.data={branches, zeros:info.zeros, poles:info.poles};
+      if(!keepView||!state.rl.view) state.rl.view={cx:info.cx, cy:info.cy, half:info.half};
 
-    // 频域
-    state.ny.data={freq:buildFreqPoints(Nc,Dc,state.w1,state.w2,900)};
-    if(state.ny.data.freq.length<2) throw new Error("频率范围内无有效响应");
-    if(!keepView||!state.ny.view) autoFitNY();
+      state.ny.data={freq:buildFreqPoints(Nc,Dc,state.w1,state.w2,900,0)};
+      if(state.ny.data.freq.length<2) throw new Error("频率范围内无有效响应");
+      if(!keepView||!state.ny.view) autoFitNY();
+      if(noteEl){ noteEl.classList.remove("show"); noteEl.innerHTML=""; }
+    }
   }catch(e){
     errEl.textContent="⚠ "+e.message;
     console.error(e);
@@ -1766,12 +2414,25 @@ document.getElementById("k-neg").addEventListener("click",()=>{
   state.rl.view=null;
   recompute(true);
 });
-document.getElementById("w-pos") && document.getElementById("w-pos").addEventListener("click",()=>{
-  state.wSign=1; redraw();
-});
-document.getElementById("w-neg") && document.getElementById("w-neg").addEventListener("click",()=>{
-  state.wSign=-1; redraw();
-});
+/* ω 方向切换：决定幅相频曲线/伯德图上"流向箭头"的指向。
+   ω>0 时箭头指向 ω 增大方向；ω<0 时指向 ω 减小方向（与镜像支一致）。 */
+(function initWSign(){
+  const pos=document.getElementById("w-pos"), neg=document.getElementById("w-neg");
+  const hint=document.getElementById("wArrowHint");
+  if(!pos||!neg) return;
+  const sync=()=>{
+    const negMode = state.wSign<0;
+    pos.classList.toggle("on", !negMode);
+    neg.classList.toggle("on",  negMode);
+    if(hint){
+      hint.innerHTML='<i class="sw arrow"></i>箭头指向 ω '
+        + (negMode?"减小":"增大") + "方向";
+    }
+  };
+  pos.addEventListener("click",()=>{ state.wSign= 1; sync(); redraw(); });
+  neg.addEventListener("click",()=>{ state.wSign=-1; sync(); redraw(); });
+  sync();
+})();
 
 document.getElementById("btn-apply").addEventListener("click",()=>{
   state.rl.view=null; state.ny.view=null;
@@ -1893,6 +2554,62 @@ document.getElementById("btn-zp").addEventListener("click",()=>{
       setTimeout(()=>{ btn.textContent=old; }, 1600);
     });
   }
+})();
+
+/* 伯德图显示方式切换：分图 <-> 合并，带融合动画。
+   动画通过 state.bode.mix 从 0 连续变到 1（或反向），
+   每帧调用 redraw()，drawBode 会按 mix 插值两格的几何，形成平滑过渡。 */
+(function initBodeMode(){
+  const btn=document.getElementById("btn-bode-mode");
+  const txt=document.getElementById("bodeModeText");
+  if(!btn||!txt) return;
+
+  let rafId=null;
+  const DURATION=380;                     // 动画时长 ms
+
+  const animateTo=(target)=>{
+    const from=state.bode.mix;
+    const t0=performance.now();
+    state.bode.animating=true;
+    if(rafId) cancelAnimationFrame(rafId);
+    const step=()=>{
+      const t=Math.min(1, (performance.now()-t0)/DURATION);
+      // easeInOutCubic：起止平滑
+      const e = t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
+      state.bode.mix = from + (target-from)*e;
+      redrawOnlyBode();
+      if(t<1){ rafId=requestAnimationFrame(step); }
+      else{
+        state.bode.mix=target;
+        state.bode.animating=false;
+        rafId=null;
+        redrawOnlyBode();
+      }
+    };
+    rafId=requestAnimationFrame(step);
+  };
+
+  // 只重绘伯德图（避免整页重算）
+  const redrawOnlyBode=()=>{
+    if(state.tab!=="p-ny") return;
+    drawBode();
+  };
+
+  const sync=()=>{
+    const merged=state.bode.mode==="merged";
+    txt.textContent = merged ? "合并显示" : "分图显示";
+    btn.classList.toggle("on", merged);
+    btn.title = merged ? "切换为分图显示（幅频/相频分开）" : "切换为合并显示（幅频/相频同图）";
+  };
+  sync();
+
+  btn.addEventListener("click",(e)=>{
+    e.stopPropagation();
+    const toMerged = state.bode.mode==="split";
+    state.bode.mode = toMerged ? "merged" : "split";
+    sync();
+    animateTo(toMerged ? 1 : 0);
+  });
 })();
 
 function attachView(cv,getView,getMargins,isRL){
@@ -2050,6 +2767,195 @@ if(typeof ResizeObserver!=="undefined"){
     }).observe(el);
   });
 }
+
+/* ===========================================================
+   输入联想：键入符号后提示"下一个合法符号"
+   -----------------------------------------------------------
+   只提示语法上接得上的符号，不做语法分析，因此不会干扰正常输入：
+   - 字母数字后 -> 运算符、(、s、e
+   - '^' 后     -> 数字、(
+   - '(' 后     -> 数字、s、e、-
+   - 运算符后   -> 数字、s、e、(、-
+
+   桌面端：Tab 唤起/接受，Esc 关闭，↑↓ 选择，鼠标点击。
+   移动端：软键盘没有 Tab/Esc，改为——
+     · 聚焦输入框即自动列出候选（无需按键唤起）
+     · 触摸点选候选（用 touchstart，不用 mousedown）
+     · 用视觉提示条告知"点一下"即可插入
+
+   浮层挂在 <body> 上并用 position:fixed 定位：
+   窄屏下 .bar 是 overflow-x:auto/overflow-y:hidden 的横向滚动条，
+   绝对定位的子元素会被裁掉（实测只露出几像素），必须脱离该容器。
+   =========================================================== */
+function initAutocomplete(input, listEl){
+  const SUG_OP   =[["+","加"],["-","减"],["*","乘"],["/","除"],["^","幂"]];
+  const SUG_AFTER_VAR=[["+","加"],["-","减"],["*","乘"],["/","除"],["^","幂"],["(","左括号"],["s","变量 s"],["e","延迟/常数 e"]];
+  const SUG_NUM  =[["+","加"],["-","减"],["*","乘"],["/","除"],["^","幂"],["(","左括号"],["s","变量 s"],["e","延迟/常数 e"],["0","0"],["1","1"],["2","2"],["5","5"]];
+  const SUG_CARET=[["0","0 次"],["1","1 次"],["2","2 次"],["3","3 次"],["(","括号指数"]];
+  const SUG_LPAREN=[["s","变量 s"],["1","数字 1"],["2","数字 2"],["e","延迟/常数 e"],["-","负号"]];
+
+  // 是否为触屏设备：决定"自动弹出"与"点选"行为
+  const isCoarse = (window.matchMedia && window.matchMedia("(pointer:coarse)").matches)
+                   || ("ontouchstart" in window && navigator.maxTouchPoints>0);
+
+  let items=[], sel=0, open=false;
+
+  /* 把浮层移到 body 下：脱离 .bar 的 overflow 裁剪。
+     只做一次，重复调用无副作用。 */
+  if(listEl.parentElement!==document.body){
+    document.body.appendChild(listEl);
+  }
+
+  function candidates(){
+    const v=input.value;
+    const pos=input.selectionStart===null?v.length:input.selectionStart;
+    let k=pos-1;
+    while(k>=0 && /\s/.test(v[k])) k--;
+    if(k<0) return SUG_NUM;
+    const c=v[k];
+    if(c==="^") return SUG_CARET;
+    if(c==="(") return SUG_LPAREN;
+    if(/[+\-*/]/.test(c)) return SUG_NUM;
+    if(c===")") return SUG_OP;
+    if(/[0-9.]/.test(c)) return SUG_NUM;
+    if(c==="s"||c==="e") return SUG_AFTER_VAR;
+    return SUG_OP;
+  }
+
+  /* 定位：贴在输入框下方；下方放不下就翻到上方；
+     水平方向优先与输入框左缘对齐，越界则贴边。 */
+  function place(){
+    const r=input.getBoundingClientRect();
+    const lw=listEl.offsetWidth  || 160;
+    const lh=listEl.offsetHeight || 180;
+    const vw=window.innerWidth, vh=window.innerHeight;
+    const M=8;
+
+    let left = r.left;
+    if(left+lw > vw-M) left = vw-M-lw;
+    if(left < M) left = M;
+
+    /* 垂直：默认放输入框下方。
+       移动端软键盘会占据下半屏，用 visualViewport 拿到"可见区域"高度，
+       避免浮层被键盘挡住——这是触屏上最关键的一处适配。 */
+    const vv=window.visualViewport;
+    const visTop = vv ? vv.offsetTop : 0;
+    const visH   = vv ? vv.height    : vh;
+    const visBottom = visTop + visH;
+
+    let top = r.bottom + 4;
+    const roomBelow = visBottom - top;
+    const roomAbove = (r.top - visTop) - 4;
+    // 下方不够且上方更宽敞 -> 翻到上方
+    if(roomBelow < lh && roomAbove > roomBelow){
+      top = r.top - lh - 4;
+    }
+    // 最终钳位在可见区域内
+    if(top + lh > visBottom - M) top = visBottom - M - lh;
+    if(top < visTop + M) top = visTop + M;
+
+    listEl.style.left = Math.round(left)+"px";
+    listEl.style.top  = Math.round(top)+"px";
+    listEl.style.right = "auto";
+  }
+
+  function render(){
+    if(!items.length){ close(); return; }
+    listEl.innerHTML="";
+    items.forEach((it,idx)=>{
+      const d=document.createElement("div");
+      d.className="ac-item"+(idx===sel?" sel":"");
+      d.innerHTML='<span class="ac-sym"></span><span class="ac-desc"></span>';
+      d.querySelector(".ac-sym").textContent=it[0];
+      d.querySelector(".ac-desc").textContent=it[1];
+      /* 触屏用 touchstart、鼠标用 mousedown：
+         移动端不一定派发 mousedown，只绑 mousedown 会导致"点了没反应"。
+         两者都 preventDefault，避免 input 先失焦而把列表关掉。 */
+      const pick=(e)=>{ e.preventDefault(); e.stopPropagation(); sel=idx; accept(); };
+      d.addEventListener("touchstart",pick,{passive:false});
+      d.addEventListener("mousedown",pick);
+      listEl.appendChild(d);
+    });
+    /* 触屏上补一行操作提示：软键盘没有 Tab/Enter，
+       明确告诉用户"点一下就能插入"，否则容易以为只是装饰。 */
+    if(isCoarse && items.length){
+      const tip=document.createElement("div");
+      tip.className="ac-tip";
+      tip.textContent="点选即可插入";
+      listEl.appendChild(tip);
+    }
+    listEl.classList.add("show");
+    open=true;
+    place();
+  }
+
+  function close(){ listEl.classList.remove("show"); open=false; }
+
+  function accept(){
+    if(!open || !items.length) return;
+    const sym=items[sel][0];
+    const v=input.value;
+    const pos=input.selectionStart===null?v.length:input.selectionStart;
+    const end=input.selectionEnd===null?pos:input.selectionEnd;
+    input.value=v.slice(0,pos)+sym+v.slice(end);
+    const np=pos+sym.length;
+    try{ input.setSelectionRange(np,np); }catch(_){}
+    close();
+    input.dispatchEvent(new Event("input",{bubbles:true}));
+    /* 触屏上不要重新 focus()：会反复弹出软键盘、打断输入节奏。
+       桌面端保留 focus 以便连续键盘操作。 */
+    if(!isCoarse) input.focus();
+  }
+
+  function show(){ items=candidates(); sel=0; render(); }
+
+  // 输入时若已打开则实时刷新候选
+  input.addEventListener("input",()=>{ if(open){ items=candidates(); sel=0; render(); } });
+
+  // 聚焦即弹出（触屏唯一的"唤起"方式）；桌面端也顺手弹出，无副作用
+  input.addEventListener("focus",()=>{ show(); });
+  input.addEventListener("click",()=>{ if(open){ items=candidates(); render(); } else show(); });
+
+  input.addEventListener("keydown",(e)=>{
+    if((e.ctrlKey&&e.key===" ")||(e.altKey&&e.key==="/")){
+      e.preventDefault(); show(); return;
+    }
+    if(!open){
+      if(e.key==="Tab"){ e.preventDefault(); show(); }
+      return;
+    }
+    if(e.key==="Escape"){ e.preventDefault(); close(); return; }
+    if(e.key==="ArrowDown"){ e.preventDefault(); sel=(sel+1)%items.length; render(); return; }
+    if(e.key==="ArrowUp"){ e.preventDefault(); sel=(sel-1+items.length)%items.length; render(); return; }
+    if(e.key==="Tab"||e.key==="Enter"){ e.preventDefault(); accept(); return; }
+  });
+
+  /* 失焦关闭。
+     触屏上点候选会先触发 blur，若立刻关闭就来不及 accept，
+     故触屏延长等待；桌面端保持较短以避免残留。 */
+  input.addEventListener("blur",()=>{ setTimeout(close, isCoarse?260:120); });
+
+  // 视口/键盘变化时重新定位（软键盘弹出会改变 visualViewport）
+  const reflow=()=>{ if(open) place(); };
+  window.addEventListener("resize",reflow);
+  window.addEventListener("scroll",reflow,{passive:true});
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize",reflow);
+    window.visualViewport.addEventListener("scroll",reflow);
+  }
+
+  // 点击/触摸浮层与输入框以外的地方关闭
+  const outside=(e)=>{
+    if(!open) return;
+    if(listEl.contains(e.target) || e.target===input) return;
+    close();
+  };
+  document.addEventListener("mousedown",outside);
+  document.addEventListener("touchstart",outside,{passive:true});
+}
+
+initAutocomplete(document.getElementById("in-num"), document.getElementById("ac-num"));
+initAutocomplete(document.getElementById("in-den"), document.getElementById("ac-den"));
 
 /* 首次计算放到布局稳定之后：
    若在脚本执行末尾立刻算，画布可能还没拿到最终尺寸，
